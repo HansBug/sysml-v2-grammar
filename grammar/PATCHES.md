@@ -332,7 +332,6 @@ The Go ANTLR runtime generates exported methods from rule names. Rules named `em
 | 48 | Allow prefix metadata annotations on enumeration value members | enumerationUsageMember | Yes |
 | 49 | Allow `REF` in body parameter declarations for `{in ref ...}` blocks | feature | Yes |
 | 50 | Allow `REGULAR_COMMENT` as a no-op expression in `baseExpression` | baseExpression | Yes |
-| 51 | Allow `definitionBodyItem` in `functionBodyPart` for body expressions | functionBodyPart | Yes |
 
 ### Fix 40: Add `endOccurrenceUsageElement` for `end [mult] port/item/part`
 
@@ -400,11 +399,17 @@ Analysis Case Usage Example.sysml uses `= ( //* ... */ )` where the entire expre
 
 **Affected rules**: baseExpression
 
-### Fix 51: Allow `definitionBodyItem` in `functionBodyPart` for body expressions
+## Conformance and ambiguity fix
 
-VehicleGeometryAndCoordinateFrames.sysml uses `private attribute` inside a `->forAll { ... }` body expression. The `functionBodyPart` rule only allowed `typeBodyElement` which routes through `featureMember` — too limited for usage elements like `attributeUsage` with visibility modifiers. Added `definitionBodyItem` as an alternative.
+| # | Summary | Rules | Applied |
+|---|---------|-------|---------|
+| 51 | Use `calculationBodyPart` for expression bodies | bodyExpression | Yes |
 
-**Affected rules**: functionBodyPart
+### Fix 51: Use `calculationBodyPart` for expression bodies
+
+The official Pilot overrides `ExpressionBody` with `CalculationBody`. Using `calculationBodyPart` preserves action/return body members and private attributes while removing the exact ambiguity between `TypeBodyElement` and a final result expression for forms such as `a.{ x }`.
+
+**Affected rules**: bodyExpression
 
 ## Dead rule removal
 

@@ -206,6 +206,10 @@ public final class ExpressionGrammarTest {
         cases.add(valid("a.metadata as T"));
         cases.add(valid("(as T).isMandatory"));
         cases.add(valid("a.{}"));
+        cases.add(valid("a.{ x }"));
+        cases.add(valid("a.?{ x }"));
+        cases.add(valid("a->F { x }"));
+        cases.add(valid("a.{ private attribute x := y; x }"));
         cases.add(valid("a.?{}"));
         cases.add(valid("a->F()"));
         cases.add(valid("a.f()").requiresRule("InvocationExpression"));

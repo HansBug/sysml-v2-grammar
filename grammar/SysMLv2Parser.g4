@@ -167,7 +167,7 @@ constructorExpression
     ;
 
 bodyExpression
-    : LBRACE functionBodyPart RBRACE
+    : LBRACE calculationBodyPart RBRACE
     ;
 
 argumentList
@@ -798,7 +798,7 @@ functionBody
     ;
 
 functionBodyPart
-    : ( definitionBodyItem | typeBodyElement | returnFeatureMember )* ( resultExpressionMember )?
+    : ( typeBodyElement | returnFeatureMember )* ( resultExpressionMember )?
     ;
 
 returnFeatureMember

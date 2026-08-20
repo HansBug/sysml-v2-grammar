@@ -2199,43 +2199,24 @@ class Antlr4Transformer:
             }
         )
 
-        # Fix 51: Allow visibility modifiers (private/protected) in body expressions.
-        # VehicleGeometryAndCoordinateFrames.sysml uses `private attribute` inside
-        # a `->forAll { ... }` body expression via functionBodyPart → typeBodyElement
-        # → featureMember → ownedFeatureMember → memberPrefix featureElement.
-        # The memberPrefix rule is (visibilityIndicator)? which should already
-        # handle 'private'. But the issue is that inside a bodyExpression,
-        # functionBodyPart uses typeBodyElement which dispatches through
-        # ownedFeatureMember → memberPrefix featureElement → feature.
-        # The 'feature' rule's second alternative starts with basicFeaturePrefix
-        # which begins with (featureDirection)?. When the parser sees 'private',
-        # it goes to memberPrefix(PRIVATE) then expects featureElement. The
-        # 'attribute' keyword routes to attributeDefinition/attributeUsage but
-        # those are under definitionElement/usageElement, NOT featureElement.
-        # The fix: add definitionBodyItem-like dispatch to typeBodyElement.
-        # Actually typeBody already has typeBodyElement which includes
-        # featureMember. The issue is that attributeUsage etc. are not under
-        # featureMember — they're under definitionBodyItemContent.
-        # The simplest fix: functionBodyPart should also accept definitionBodyItem.
-        prev = grammar
-        grammar = grammar.replace(
-            "functionBodyPart\n"
-            "    : ( typeBodyElement | returnFeatureMember )* ( resultExpressionMember )?",
-            "functionBodyPart\n"
-            "    : ( definitionBodyItem | typeBodyElement | returnFeatureMember )* ( resultExpressionMember )?",
-        )
+        # Fix 51: Use the SysML calculation body for expression bodies.
+        # The official Pilot overrides ExpressionBody with CalculationBody;
+        # CalculationBodyPart accepts action/return members followed by one
+        # result expression. Reusing FunctionBodyPart here makes a bare result
+        # such as `a.{ x }` compete with TypeBodyElement, producing an exact
+        # ANTLR ambiguity and the wrong tree. CalculationBodyPart also retains
+        # the `private attribute` body members used by the official examples.
         self.applied_patches.append(
             {
                 "id": "51",
-                "category": "Conformance fix",
-                "summary": "Allow `definitionBodyItem` in `functionBodyPart` for body expressions",
-                "description": "VehicleGeometryAndCoordinateFrames.sysml uses `private attribute` inside "
-                "a `->forAll { ... }` body expression. The `functionBodyPart` rule only allowed "
-                "`typeBodyElement` which routes through `featureMember` — too limited for "
-                "usage elements like `attributeUsage` with visibility modifiers. Added "
-                "`definitionBodyItem` as an alternative.",
-                "rules": "functionBodyPart",
-                "applied": grammar != prev,
+                "category": "Conformance and ambiguity fix",
+                "summary": "Use `calculationBodyPart` for expression bodies",
+                "description": "The official Pilot overrides `ExpressionBody` with `CalculationBody`. "
+                "Using `calculationBodyPart` preserves action/return body members and private attributes "
+                "while removing the exact ambiguity between `TypeBodyElement` and a final result expression "
+                "for forms such as `a.{ x }`.",
+                "rules": "bodyExpression",
+                "applied": True,
             }
         )
 
@@ -2723,9 +2704,12 @@ class Antlr4Transformer:
         lines.append("    ;")
         lines.append("")
 
-        # Body expression
+        # Body expression. SysML's official grammar overrides ExpressionBody
+        # with CalculationBody, whose CalculationBodyPart is unambiguous for
+        # both body members and the final result expression:
+        # https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L1939-L1959
         lines.append("bodyExpression")
-        lines.append("    : LBRACE functionBodyPart RBRACE")
+        lines.append("    : LBRACE calculationBodyPart RBRACE")
         lines.append("    ;")
         lines.append("")
 
