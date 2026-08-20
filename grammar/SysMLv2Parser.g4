@@ -32,6 +32,8 @@ operatorExpression
     : nullCoalescingExpression
     ;
 
+// Evidence map: KEBNF `ConditionalBinaryOperator` groups `??`, `or`, `and`, and `implies`; `BinaryOperator` groups `|`, `&`, `xor`, equality, relational, range, additive, multiplicative, and exponentiation.
+// Reference: KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L949-L969; normative precedence and associativity: KerML 1.0 Clause 8.2.5.8.1 Table 6 and Note 2 https://www.omg.org/spec/KerML/1.0/PDF#page=124
 nullCoalescingExpression
     : impliesExpression ( QUESTION_QUESTION impliesExpression )*
     ;
@@ -59,7 +61,7 @@ equalityExpression
 // Evidence: KerML 1.0 Clause 8.2.5.8.1 defines one optional classification/cast suffix, and the Pilot places it between relational and equality expressions.
 // Reference: KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L974-L997; Pilot https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L156-L183
 // Evidence: KEBNF MetaclassificationExpression uses MetadataReference -> ElementReferenceMember, and KerML 1.0 Clause 7.4.9.2 shows `designModel @@ ApprovalAnnotation` and `sensors meta KerML::Feature`; therefore `@@` and `meta` require a qualified name operand and cannot be prefix operators.
-// Reference: KerML 1.0 Clause 7.4.9.2, https://www.omg.org/spec/KerML/1.0/PDF, and KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L994-L1001
+// Reference: KerML 1.0 Clause 7.4.9.2, https://www.omg.org/spec/KerML/1.0/PDF, and KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L994-L1001 and #L1021-L1037
 // Observed PR #10 behavior under ANTLR 4.13.2: `a istype T + b` became `(a istype T) + b`, `a istype T as U` was accepted, and bare `@@ T` was accepted; these forms now stop at the explicit classification boundary or require a qualified name.
 classificationExpression
     : relationalExpression ( ( ISTYPE | HASTYPE | AT_SIGN | AS ) typeReference )?
@@ -166,8 +168,12 @@ constructorExpression
     : NEW featureChainMember argumentList
     ;
 
+// Evidence: the normative KerML KEBNF defines ExpressionBody as `{ FunctionBodyPart }` (FunctionBodyPart permits type-body members plus an optional result); the SysML KEBNF defines CalculationBody with `';'` and a braced form; the official SysML Pilot overrides ExpressionBody with CalculationBody.
+// Reference: KerML KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L876-L891; SysML KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/SysML-textual-bnf.kebnf#L1353-L1378; SysML Pilot CalculationBody https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L1939-L1969 and override #L2434-L2439
+// This combined SysML grammar follows the first-party SysML override: the braced branch accepts body parameters, action/return members, and a final result, while the semicolon branch preserves the official empty-body form. Using generic FunctionBodyPart here would make a bare result such as `a.{ x }` compete with a type-body feature member.
 bodyExpression
-    : LBRACE calculationBodyPart RBRACE
+    : SEMI
+    | LBRACE calculationBodyPart RBRACE
     ;
 
 argumentList

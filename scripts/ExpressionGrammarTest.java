@@ -205,10 +205,13 @@ public final class ExpressionGrammarTest {
         cases.add(valid("a.metadata @ T"));
         cases.add(valid("a.metadata as T"));
         cases.add(valid("(as T).isMandatory"));
-        cases.add(valid("a.{}"));
-        cases.add(valid("a.{ x }"));
-        cases.add(valid("a.?{ x }"));
-        cases.add(valid("a->F { x }"));
+        cases.add(valid("a.{}").requiresRule("BodyExpression"));
+        cases.add(valid("a.{ x }").requiresRule("BodyExpression"));
+        cases.add(valid("a.?{ x }").requiresRule("BodyExpression"));
+        cases.add(valid("a.;").requiresRule("BodyExpression"));
+        cases.add(valid("a.?;").requiresRule("BodyExpression"));
+        cases.add(valid("a->F;"));
+        cases.add(valid("a->F { x }").requiresRule("BodyExpression"));
         cases.add(valid("a.{ private attribute x := y; x }"));
         cases.add(valid("a.?{}"));
         cases.add(valid("a->F()"));
@@ -374,12 +377,84 @@ public final class ExpressionGrammarTest {
         System.out.println((testCase.valid ? "PASS valid  " : "PASS invalid") + "  " + testCase.input);
     }
 
+    private static void runRoot(String input, boolean valid) {
+        ErrorCollector lexerErrors = new ErrorCollector();
+        SysMLv2Lexer lexer = new SysMLv2Lexer(CharStreams.fromString(input));
+        lexer.removeErrorListeners();
+        lexer.addErrorListener(lexerErrors);
+
+        CommonTokenStream tokens = new CommonTokenStream(lexer);
+        ErrorCollector parserErrors = new ErrorCollector();
+        SysMLv2Parser parser = new SysMLv2Parser(tokens);
+        parser.removeErrorListeners();
+        parser.addErrorListener(parserErrors);
+        parser.getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);
+        ParseTree tree = parser.rootNamespace();
+        boolean consumedEof = parser.getCurrentToken().getType() == Token.EOF;
+        boolean actualValid =
+                lexerErrors.messages.isEmpty()
+                        && parserErrors.messages.isEmpty()
+                        && parserErrors.ambiguities == 0
+                        && consumedEof;
+
+        if (actualValid != valid) {
+            throw new AssertionError(
+                    "Unexpected root validity for `"
+                            + input
+                            + "`: expected "
+                            + valid
+                            + ", got "
+                            + actualValid
+                            + "\nlexer="
+                            + lexerErrors.messages
+                            + "\nparser="
+                            + parserErrors.messages
+                            + "\nambiguities="
+                            + parserErrors.ambiguities
+                            + "\n"
+                            + tree.toStringTree(parser));
+        }
+        System.out.println((valid ? "PASS root valid  " : "PASS root invalid") + "  " + input);
+    }
+
     public static void main(String[] args) {
         int count = 0;
         for (TestCase testCase : cases()) {
             run(testCase);
             count++;
         }
-        System.out.println("Expression grammar checks passed: " + count);
+
+        String[] rootValid = {
+            "package P { attribute x = a.{ x }; }",
+            "package P { attribute x = a.?{ in ref xx; xx + 1 }; }",
+            "package P { attribute x = a->collect { in xx; xx + 1 }; }",
+            "package P { attribute x = a.{ private attribute y := z; y }; }",
+            "package P { attribute x = a.{ return x; x }; }",
+            "package P { attribute x = a + b * c; }",
+            "package P { attribute x = a.;; }",
+            "package P { attribute x = a.?;; }",
+            "package P { attribute x = a->F;; }",
+        };
+        for (String input : rootValid) {
+            runRoot(input, true);
+        }
+
+        String[] rootInvalid = {
+            "package P { attribute x = a[]; }",
+            "package P { attribute x = a#(); }",
+            "package P { attribute x = a istype T + b; }",
+        };
+        for (String input : rootInvalid) {
+            runRoot(input, false);
+        }
+
+        System.out.println(
+                "Expression grammar checks passed: "
+                        + count
+                        + " plus "
+                        + rootValid.length
+                        + " root-valid and "
+                        + rootInvalid.length
+                        + " root-invalid cases");
     }
 }

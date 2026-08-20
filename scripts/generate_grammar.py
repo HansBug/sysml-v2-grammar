@@ -2200,21 +2200,30 @@ class Antlr4Transformer:
         )
 
         # Fix 51: Use the SysML calculation body for expression bodies.
-        # The official Pilot overrides ExpressionBody with CalculationBody;
-        # CalculationBodyPart accepts action/return members followed by one
-        # result expression. Reusing FunctionBodyPart here makes a bare result
-        # such as `a.{ x }` compete with TypeBodyElement, producing an exact
-        # ANTLR ambiguity and the wrong tree. CalculationBodyPart also retains
-        # the `private attribute` body members used by the official examples.
+        # The normative KerML KEBNF defines ExpressionBody as
+        # `{ FunctionBodyPart }`, but the official SysML Pilot overrides that
+        # production with CalculationBody. CalculationBodyPart accepts
+        # action/return members followed by one result expression. Reusing
+        # FunctionBodyPart here makes a bare result such as `a.{ x }` compete
+        # with TypeBodyElement, producing an exact ANTLR ambiguity and an
+        # unstable tree. Sources:
+        #   KerML KEBNF: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L876-L891
+        #   SysML KEBNF: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/SysML-textual-bnf.kebnf#L1353-L1378
+        #   SysML Pilot: https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L1939-L1969 and #L2434-L2439
         self.applied_patches.append(
             {
                 "id": "51",
-                "category": "Conformance and ambiguity fix",
+                "category": "SysML/Pilot alignment and ambiguity fix",
                 "summary": "Use `calculationBodyPart` for expression bodies",
-                "description": "The official Pilot overrides `ExpressionBody` with `CalculationBody`. "
-                "Using `calculationBodyPart` preserves action/return body members and private attributes "
-                "while removing the exact ambiguity between `TypeBodyElement` and a final result expression "
-                "for forms such as `a.{ x }`.",
+                "description": "KerML KEBNF defines `ExpressionBody` as `{ FunctionBodyPart }`, "
+                "whereas the SysML KEBNF defines `CalculationBody` and the official SysML Pilot "
+                "overrides it with that production "
+                "(KerML KEBNF lines 876-891; SysML KEBNF lines 1353-1378; SysML Pilot `SysML.xtext` "
+                "lines 1939-1969 and 2434-2439). "
+                "This SysML grammar follows the first-party override: `calculationBodyPart` preserves "
+                "action/return members and private attributes, keeps the final result expression, and "
+                "removes the exact `TypeBodyElement` versus result ambiguity for `a.{ x }`; the `SEMI` "
+                "alternative is retained because it is part of the official `CalculationBody` production.",
                 "rules": "bodyExpression",
                 "applied": True,
             }
@@ -2479,6 +2488,12 @@ class Antlr4Transformer:
         # that order from low to high. The KEBNF note is at:
         # https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1061-L1064
         # Each `(...)*` below implements the required left associativity.
+        lines.append(
+            "// Evidence map: KEBNF `ConditionalBinaryOperator` groups `??`, `or`, `and`, and `implies`; `BinaryOperator` groups `|`, `&`, `xor`, equality, relational, range, additive, multiplicative, and exponentiation."
+        )
+        lines.append(
+            "// Reference: KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L949-L969; normative precedence and associativity: KerML 1.0 Clause 8.2.5.8.1 Table 6 and Note 2 https://www.omg.org/spec/KerML/1.0/PDF#page=124"
+        )
         lines.append("nullCoalescingExpression")
         lines.append("    : impliesExpression ( QUESTION_QUESTION impliesExpression )*")
         lines.append("    ;")
@@ -2526,7 +2541,7 @@ class Antlr4Transformer:
             "// Evidence: KEBNF MetaclassificationExpression uses MetadataReference -> ElementReferenceMember, and KerML 1.0 Clause 7.4.9.2 shows `designModel @@ ApprovalAnnotation` and `sensors meta KerML::Feature`; therefore `@@` and `meta` require a qualified name operand and cannot be prefix operators."
         )
         lines.append(
-            "// Reference: KerML 1.0 Clause 7.4.9.2, https://www.omg.org/spec/KerML/1.0/PDF, and KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L994-L1001"
+            "// Reference: KerML 1.0 Clause 7.4.9.2, https://www.omg.org/spec/KerML/1.0/PDF, and KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L994-L1001 and #L1021-L1037"
         )
         lines.append(
             "// Observed PR #10 behavior under ANTLR 4.13.2: `a istype T + b` became `(a istype T) + b`, `a istype T as U` was accepted, and bare `@@ T` was accepted; these forms now stop at the explicit classification boundary or require a qualified name."
@@ -2707,9 +2722,20 @@ class Antlr4Transformer:
         # Body expression. SysML's official grammar overrides ExpressionBody
         # with CalculationBody, whose CalculationBodyPart is unambiguous for
         # both body members and the final result expression:
-        # https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L1939-L1959
+        # SysML KEBNF: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/SysML-textual-bnf.kebnf#L1353-L1378
+        # SysML Pilot: https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L1939-L1959 and #L2437-L2439
+        lines.append(
+            "// Evidence: the normative KerML KEBNF defines ExpressionBody as `{ FunctionBodyPart }` (FunctionBodyPart permits type-body members plus an optional result); the SysML KEBNF defines CalculationBody with `';'` and a braced form; the official SysML Pilot overrides ExpressionBody with CalculationBody."
+        )
+        lines.append(
+            "// Reference: KerML KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L876-L891; SysML KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/SysML-textual-bnf.kebnf#L1353-L1378; SysML Pilot CalculationBody https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L1939-L1969 and override #L2434-L2439"
+        )
+        lines.append(
+            "// This combined SysML grammar follows the first-party SysML override: the braced branch accepts body parameters, action/return members, and a final result, while the semicolon branch preserves the official empty-body form. Using generic FunctionBodyPart here would make a bare result such as `a.{ x }` compete with a type-body feature member."
+        )
         lines.append("bodyExpression")
-        lines.append("    : LBRACE calculationBodyPart RBRACE")
+        lines.append("    : SEMI")
+        lines.append("    | LBRACE calculationBodyPart RBRACE")
         lines.append("    ;")
         lines.append("")
 

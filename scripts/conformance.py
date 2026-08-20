@@ -18,6 +18,7 @@ Requires:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import shutil
 import subprocess
 import sys
@@ -31,13 +32,12 @@ ROOT = Path(__file__).resolve().parent.parent
 BUILD_DIR = ROOT / ".build"
 ANTLR_JAR = BUILD_DIR / "antlr4.jar"
 GRAMMAR_CLASS_DIR = BUILD_DIR / "antlr-test" / "grammar"
+GRAMMAR_STAMP = BUILD_DIR / "antlr-test" / ".grammar.sha256"
 FIXTURES_DIR = ROOT / "test" / "fixtures" / "conformance"
 
 LIBRARY_REPO = "Systems-Modeling/SysML-v2-Release"
-LIBRARY_BRANCH = "master"
-LIBRARY_ARCHIVE = (
-    f"https://github.com/{LIBRARY_REPO}/archive/refs/heads/{LIBRARY_BRANCH}.tar.gz"
-)
+LIBRARY_REVISION = "de1070ae8e79c21532b8004fc663d47b35d0e9fa"
+LIBRARY_ARCHIVE = f"https://github.com/{LIBRARY_REPO}/archive/{LIBRARY_REVISION}.tar.gz"
 
 # Standard library ships with the repo (committed)
 LIBRARY_DIR = ROOT / "sysml.library"
@@ -103,12 +103,25 @@ def ensure_grammar_compiled() -> None:
         )
         sys.exit(1)
 
-    # Check if already compiled
-    if (GRAMMAR_CLASS_DIR / "SysMLv2Parser.class").exists():
+    grammar_sources = [
+        ROOT / "grammar" / "SysMLv2Lexer.g4",
+        ROOT / "grammar" / "SysMLv2Parser.g4",
+    ]
+    digest = hashlib.sha256()
+    for source in grammar_sources:
+        digest.update(source.read_bytes())
+    source_hash = digest.hexdigest()
+
+    # Reuse only a build produced from the current grammar sources.
+    previous_hash = GRAMMAR_STAMP.read_text().strip() if GRAMMAR_STAMP.exists() else ""
+    if (
+        GRAMMAR_CLASS_DIR / "SysMLv2Parser.class"
+    ).exists() and previous_hash == source_hash:
         return
 
     print("  Compiling grammar (Java target)...")
     compile_dir = BUILD_DIR / "antlr-test"
+    shutil.rmtree(compile_dir, ignore_errors=True)
     compile_dir.mkdir(parents=True, exist_ok=True)
 
     subprocess.run(
@@ -119,19 +132,22 @@ def ensure_grammar_compiled() -> None:
             "-Dlanguage=Java",
             "-o",
             str(compile_dir),
-            str(ROOT / "grammar" / "SysMLv2Lexer.g4"),
-            str(ROOT / "grammar" / "SysMLv2Parser.g4"),
+            "grammar/SysMLv2Lexer.g4",
+            "grammar/SysMLv2Parser.g4",
         ],
+        cwd=str(ROOT),
         check=True,
         capture_output=True,
     )
 
+    java_sources = [str(path.name) for path in sorted(GRAMMAR_CLASS_DIR.glob("*.java"))]
     subprocess.run(
-        ["javac", "-cp", f"{ANTLR_JAR}:.", "*.java"],
+        ["javac", "-cp", f"{ANTLR_JAR}:.", *java_sources],
         cwd=str(GRAMMAR_CLASS_DIR),
         check=True,
         capture_output=True,
     )
+    GRAMMAR_STAMP.write_text(source_hash + "\n")
 
 
 def parse_file(filepath: Path) -> ParseFailure | None:
@@ -142,7 +158,7 @@ def parse_file(filepath: Path) -> ParseFailure | None:
             "-cp",
             f"{ANTLR_JAR}:.",
             "org.antlr.v4.gui.TestRig",
-            "SysMLv2Parser",
+            "SysMLv2",
             "rootNamespace",
             str(filepath),
         ],
@@ -153,9 +169,13 @@ def parse_file(filepath: Path) -> ParseFailure | None:
     )
 
     stderr = result.stderr.strip()
-    if stderr and ("error" in stderr.lower() or "line " in stderr.lower()):
+    if result.returncode != 0 or stderr:
         rel = str(filepath.relative_to(ROOT))
-        first_line = stderr.split("\n")[0][:120]
+        first_line = (
+            stderr
+            or result.stdout.strip()
+            or f"TestRig exited with {result.returncode}"
+        ).split("\n")[0][:120]
         return ParseFailure(file=rel, stderr=first_line)
     return None
 
