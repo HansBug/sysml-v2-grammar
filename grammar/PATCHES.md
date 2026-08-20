@@ -5,9 +5,9 @@ OMG SysML v2 KEBNF specification when translated to ANTLR4.
 
 - **Grammar version**: `2026.05.2`
 - **OMG release**: `2026-05`
-- **Total patches**: 53
-- **Applied**: 52
-- **Skipped**: 1
+- **Total patches**: 56
+- **Applied**: 53
+- **Skipped**: 3
 
 ## Spec BNF fix
 
@@ -323,7 +323,7 @@ The Go ANTLR runtime generates exported methods from rule names. Rules named `em
 |---|---------|-------|---------|
 | 40 | Add `endOccurrenceUsageElement` for `end [mult] port/item/part` | endOccurrenceUsageElement (new), definitionBodyItem, interfaceOccurrenceUsageElement | Yes |
 | 41 | Allow bare `NOT SATISFY` without `ASSERT` prefix | satisfyRequirementUsage | Yes |
-| 42 | Handle `//*..*/` block comments in `REGULAR_COMMENT` lexer rule | REGULAR_COMMENT (lexer rule, updated) | Yes |
+| 42 | Handle `//*..*/` block comments in `REGULAR_COMMENT` lexer rule (superseded) | REGULAR_COMMENT (historical lexer rule) | No |
 | 43 | Allow optional name and `nonunique` in `endOccurrenceUsageElement` | endOccurrenceUsageElement | Yes |
 | 44 | Allow keywords as names in name positions | name, unreservedKeyword (new) | Yes |
 | 45 | Reorder `actionNodeMember` before `behaviorUsageMember` in `actionBehaviorMember` | actionBehaviorMember | Yes |
@@ -331,7 +331,10 @@ The Go ANTLR runtime generates exported methods from rule names. Rules named `em
 | 47 | Allow `send` without inline payload/receiver in `sendNode` | sendNode | Yes |
 | 48 | Allow prefix metadata annotations on enumeration value members | enumerationUsageMember | Yes |
 | 49 | Allow `REF` in body parameter declarations for `{in ref ...}` blocks | feature | Yes |
-| 50 | Allow `REGULAR_COMMENT` as a no-op expression in `baseExpression` | baseExpression | Yes |
+| 50 | Allow `REGULAR_COMMENT` as a no-op expression in `baseExpression` (superseded) | baseExpression (historical alternative) | No |
+| 54 | Keep `REGULAR_COMMENT` distinct from `ML_NOTE` | REGULAR_COMMENT, ML_NOTE | Yes |
+| 55 | Keep `REGULAR_COMMENT` out of `baseExpression` | baseExpression | Yes |
+| 56 | Allow `typed` as a contextual name | unreservedKeyword, name | Yes |
 
 ### Fix 40: Add `endOccurrenceUsageElement` for `end [mult] port/item/part`
 
@@ -345,11 +348,11 @@ The official OMG example `RequirementTest.sysml` uses `not satisfy r1 by p;` wit
 
 **Affected rules**: satisfyRequirementUsage
 
-### Fix 42: Handle `//*..*/` block comments in `REGULAR_COMMENT` lexer rule
+### Fix 42: Handle `//*..*/` block comments in `REGULAR_COMMENT` lexer rule (superseded)
 
-Official OMG SysML v2 training/validation files use `//* ... */` to comment out code blocks. Changed `REGULAR_COMMENT` to `'//'? '/*' .*? '*/'` so it also matches the `//` prefix form. ANTLR longest-match ensures `REGULAR_COMMENT` wins over `SINGLE_LINE_NOTE` for single-line `//* ... */`.
+The former broad rule merged `//* ... */` into `REGULAR_COMMENT`. That behavior is superseded by Fix 54 because the official OMG KEBNF and Pilot define `MULTILINE_NOTE`/`ML_NOTE` separately from `REGULAR_COMMENT`.
 
-**Affected rules**: REGULAR_COMMENT (lexer rule, updated)
+**Affected rules**: REGULAR_COMMENT (historical lexer rule)
 
 ### Fix 43: Allow optional name and `nonunique` in `endOccurrenceUsageElement`
 
@@ -393,11 +396,29 @@ TradeStudies, 7b-Variant Configurations, and 15_05-Unification use `->forAll {in
 
 **Affected rules**: feature
 
-### Fix 50: Allow `REGULAR_COMMENT` as a no-op expression in `baseExpression`
+### Fix 50: Allow `REGULAR_COMMENT` as a no-op expression in `baseExpression` (superseded)
 
-Analysis Case Usage Example.sysml uses `= ( //* ... */ )` where the entire expression is a commented-out placeholder. After Fix 42 unified `//*` into `REGULAR_COMMENT`, the token appears inside parenthesized expressions. Added `REGULAR_COMMENT` as an alternative in `baseExpression`.
+The former rule admitted a regular comment as an expression placeholder after the old Fix 42 lexer merge. That behavior is superseded by Fix 55 because the official OMG KEBNF and Pilot keep `REGULAR_COMMENT` as a comment body token.
+
+**Affected rules**: baseExpression (historical alternative)
+
+### Fix 54: Keep `REGULAR_COMMENT` distinct from `ML_NOTE`
+
+The [OMG KerML KEBNF lexical rules](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L32-L46) define `MULTILINE_NOTE` as `'//*' COMMENT_TEXT '*/'` and `REGULAR_COMMENT` as `'/*' COMMENT_TEXT '*/'`. The [official Pilot terminals](https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L569-L578) mirror this with separate hidden `ML_NOTE` and visible `REGULAR_COMMENT` terminals. The generated lexer therefore keeps `ML_NOTE` on the hidden channel and preserves regular comments for model-owned comment, documentation, and textual-representation bodies.
+
+**Affected rules**: REGULAR_COMMENT, ML_NOTE
+
+### Fix 55: Keep `REGULAR_COMMENT` out of `baseExpression`
+
+The [official OMG KEBNF](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L32-L46) and [Pilot expression grammar](https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L349-L378) define `REGULAR_COMMENT` as a model-owned comment body, while `baseExpression` contains only expression productions. Removed the superseded `REGULAR_COMMENT` alternative so regular comments cannot be accepted as no-op expressions.
 
 **Affected rules**: baseExpression
+
+### Fix 56: Allow `typed` as a contextual name
+
+The [official Pilot Name rule](https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L534-L550) is `ID | UNRESTRICTED_NAME`, and the direct official lexer emits bare `typed` as `RULE_ID`; the direct `OwnedExpression` probe accepts it. Keep the generated `TYPED` token for `typed by` and add it to `unreservedKeyword` so the ANTLR parser matches that acceptance boundary.
+
+**Affected rules**: unreservedKeyword, name
 
 ## SysML/Pilot alignment and ambiguity fix
 

@@ -135,9 +135,10 @@ sequenceExpressionList
 
 // Evidence: KEBNF Clause 8.2.5.8.3 separates FeatureReferenceExpression, MetadataAccessExpression, and InvocationExpression; InvocationExpression accepts an InstantiatedTypeMember plus ArgumentList.
 // Reference: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1198-L1229
+// Evidence: REGULAR_COMMENT is a model-owned comment body, while ML_NOTE is hidden lexical trivia; neither is a base expression in the official KEBNF or Pilot.
+// Reference: KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L32-L46; Pilot https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L349-L378
 baseExpression
     : nullExpression
-    | REGULAR_COMMENT   // ignore block comments used as expression placeholders
     | literalExpression
     | featureReferenceExpression
     | metadataAccessExpression
@@ -222,15 +223,16 @@ name
     | unreservedKeyword
     ;
 
+// Evidence: the official Pilot Name rule is ID | UNRESTRICTED_NAME;
+// direct Pilot lexing emits bare `typed` as ID and accepts it in OwnedExpression.
+// Reference: https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L534-L550
 // Keywords that appear as names in the official OMG standard library.
 // These are contextually unreserved — valid as identifiers in name positions.
 unreservedKeyword
     : TYPE
     | MULTIPLICITY
     | VAR
-    | LANGUAGE
-    | LOCALE
-    | CROSSES
+    | TYPED
     | STEP
     | FEATURE
     | BEHAVIOR

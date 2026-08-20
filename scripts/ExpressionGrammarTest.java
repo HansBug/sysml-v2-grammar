@@ -225,6 +225,17 @@ public final class ExpressionGrammarTest {
         cases.add(valid("a.{x; ;}").requiresRule("BodyExpression"));
         cases.add(valid("a.{x ; ;}").requiresRule("BodyExpression"));
         cases.add(valid("a.{y ; ;}").requiresRule("BodyExpression"));
+        // Official KEBNF/Pilot keep REGULAR_COMMENT visible as a model-owned
+        // comment body; it is not a base-expression operand. ML_NOTE is hidden
+        // trivia only when it is recognized as a multiline note.
+        cases.add(valid("a.{/* c */}"));
+        cases.add(valid("a.{x; /* c */}"));
+        cases.add(valid("a.?{/* c */}"));
+        cases.add(valid("a->f{/* c */}"));
+        cases.add(valid("a.{\n//* c */\n}"));
+        cases.add(invalid("a.{//* c */}"));
+        cases.add(invalid("a.{//* c */}\n"));
+        cases.add(invalid("(/* c */)"));
         cases.add(valid("a->F()"));
         cases.add(valid("a.f()").requiresRule("InvocationExpression"));
         cases.add(valid("a.f.g()"));
@@ -268,6 +279,12 @@ public final class ExpressionGrammarTest {
         cases.add(invalid("a->F"));
         cases.add(invalid("a->F.g"));
         cases.add(invalid("a + b c"));
+        // KerML Pilot Name is ID | UNRESTRICTED_NAME. These reserved words
+        // must not be admitted through the compatibility name alternatives.
+        cases.add(invalid("language"));
+        cases.add(invalid("locale"));
+        cases.add(invalid("crosses"));
+        cases.add(valid("typed"));
         // The abstract KEBNF derives these through OwnedExpression operands,
         // but the released Pilot's concrete precedence grammar rejects them.
         // Keep that implementation boundary explicit until a deterministic

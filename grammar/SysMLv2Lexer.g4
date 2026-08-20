@@ -246,12 +246,19 @@ INTEGER : [0-9]+ ;
 REAL : [0-9]* '.' [0-9]+ ( [eE] [+-]? [0-9]+ )? | [0-9]+ [eE] [+-]? [0-9]+ ;
 
 // Comments
-// REGULAR_COMMENT also matches //* ... */ (OMG block-comment-out convention).
-REGULAR_COMMENT : '/*' .*? '*/' | '//*' .*? '*/' ;
-// SINGLE_LINE_NOTE: '//' followed by non-'*' content (to avoid consuming
-// //* ... */ block comments which are handled by REGULAR_COMMENT).
-// A bare '//' at end of line is handled by the second rule.
-SINGLE_LINE_NOTE : '//' ~[*\r\n] ~[\r\n]* -> skip ;
+// Evidence: the OMG KerML KEBNF defines MULTILINE_NOTE as '//*' COMMENT_TEXT '*/'
+// and REGULAR_COMMENT as '/*' COMMENT_TEXT '*/'; the official Pilot exposes
+// distinct ML_NOTE and REGULAR_COMMENT terminals, with ML_NOTE hidden from parsing.
+// Reference: KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L32-L46;
+// Pilot https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L569-L578
+REGULAR_COMMENT : '/*' .*? '*/' ;
+// The official Xtext/ANTLR3 lexer has an observable EOF-dependent tie break:
+// a `//* ... */` line is an ML_NOTE when more source follows after its line,
+// but SL_NOTE consumes the rest of a final line. The EOF-qualified rule
+// handles that tie without making punctuation-specific assumptions.
+SINGLE_LINE_NOTE_EOF : '//' ~[\r\n]* ('\r'? '\n')? EOF -> skip ;
+ML_NOTE : '//*' .*? '*/' -> channel(HIDDEN) ;
+SINGLE_LINE_NOTE : '//' ~[*\r\n] ~[\r\n]* ('\r'? '\n')? -> skip ;
 BARE_LINE_COMMENT : '//' -> skip ;
 
 // Whitespace

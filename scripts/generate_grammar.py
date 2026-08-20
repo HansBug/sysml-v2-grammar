@@ -564,17 +564,40 @@ class Antlr4Transformer:
         # Comments and whitespace
         lines.append("// Comments")
         lines.append(
-            "// REGULAR_COMMENT also matches //* ... */ (OMG block-comment-out convention)."
-        )
-        lines.append("REGULAR_COMMENT : '/*' .*? '*/' | '//*' .*? '*/' ;")
-        lines.append(
-            "// SINGLE_LINE_NOTE: '//' followed by non-'*' content (to avoid consuming"
+            "// Evidence: the OMG KerML KEBNF defines MULTILINE_NOTE as '//*' COMMENT_TEXT '*/'"
         )
         lines.append(
-            "// //* ... */ block comments which are handled by REGULAR_COMMENT)."
+            "// and REGULAR_COMMENT as '/*' COMMENT_TEXT '*/'; the official Pilot exposes"
         )
-        lines.append("// A bare '//' at end of line is handled by the second rule.")
-        lines.append("SINGLE_LINE_NOTE : '//' ~[*\\r\\n] ~[\\r\\n]* -> skip ;")
+        lines.append(
+            "// distinct ML_NOTE and REGULAR_COMMENT terminals, with ML_NOTE hidden from parsing."
+        )
+        lines.append(
+            "// Reference: KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L32-L46;"
+        )
+        lines.append(
+            "// Pilot https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L569-L578"
+        )
+        lines.append("REGULAR_COMMENT : '/*' .*? '*/' ;")
+        lines.append(
+            "// The official Xtext/ANTLR3 lexer has an observable EOF-dependent tie break:"
+        )
+        lines.append(
+            "// a `//* ... */` line is an ML_NOTE when more source follows after its line,"
+        )
+        lines.append(
+            "// but SL_NOTE consumes the rest of a final line. The EOF-qualified rule"
+        )
+        lines.append(
+            "// handles that tie without making punctuation-specific assumptions."
+        )
+        lines.append(
+            "SINGLE_LINE_NOTE_EOF : '//' ~[\\r\\n]* ('\\r'? '\\n')? EOF -> skip ;"
+        )
+        lines.append("ML_NOTE : '//*' .*? '*/' -> channel(HIDDEN) ;")
+        lines.append(
+            "SINGLE_LINE_NOTE : '//' ~[*\\r\\n] ~[\\r\\n]* ('\\r'? '\\n')? -> skip ;"
+        )
         lines.append("BARE_LINE_COMMENT : '//' -> skip ;")
         lines.append("")
 
@@ -1920,19 +1943,18 @@ class Antlr4Transformer:
             rules="satisfyRequirementUsage",
         )
 
-        # Fix 42: //* ... */ block comment (lexer-level, handled in generate_lexer).
-        # Record the patch for documentation.
+        # Fix 42 is retained as a historical record. Its broad lexer behavior is
+        # superseded by Fix 54, which follows the official lexical split.
         self.applied_patches.append(
             {
                 "id": "42",
                 "category": "Conformance fix",
-                "summary": "Handle `//*..*/` block comments in `REGULAR_COMMENT` lexer rule",
-                "description": "Official OMG SysML v2 training/validation files use `//* ... */` to "
-                "comment out code blocks. Changed `REGULAR_COMMENT` to `'//'? '/*' .*? '*/'` so "
-                "it also matches the `//` prefix form. ANTLR longest-match ensures "
-                "`REGULAR_COMMENT` wins over `SINGLE_LINE_NOTE` for single-line `//* ... */`.",
-                "rules": "REGULAR_COMMENT (lexer rule, updated)",
-                "applied": True,
+                "summary": "Handle `//*..*/` block comments in `REGULAR_COMMENT` lexer rule (superseded)",
+                "description": "The former broad rule merged `//* ... */` into `REGULAR_COMMENT`. "
+                "That behavior is superseded by Fix 54 because the official OMG KEBNF and Pilot "
+                "define `MULTILINE_NOTE`/`ML_NOTE` separately from `REGULAR_COMMENT`.",
+                "rules": "REGULAR_COMMENT (historical lexer rule)",
+                "applied": False,
             }
         )
 
@@ -1985,15 +2007,16 @@ class Antlr4Transformer:
             "    | unreservedKeyword\n"
             "    ;\n"
             "\n"
+            "// Evidence: the official Pilot Name rule is ID | UNRESTRICTED_NAME;\n"
+            "// direct Pilot lexing emits bare `typed` as ID and accepts it in OwnedExpression.\n"
+            "// Reference: https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L534-L550\n"
             "// Keywords that appear as names in the official OMG standard library.\n"
             "// These are contextually unreserved — valid as identifiers in name positions.\n"
             "unreservedKeyword\n"
             "    : TYPE\n"
             "    | MULTIPLICITY\n"
             "    | VAR\n"
-            "    | LANGUAGE\n"
-            "    | LOCALE\n"
-            "    | CROSSES\n"
+            "    | TYPED\n"
             "    | STEP\n"
             "    | FEATURE\n"
             "    | BEHAVIOR\n"
@@ -2172,31 +2195,19 @@ class Antlr4Transformer:
             rules="feature",
         )
 
-        # Fix 50: Allow REGULAR_COMMENT inside parenthesized expressions.
-        # Analysis Case Usage Example.sysml uses `= ( //* ... */ )` where the
-        # block comment is the entire value (commented-out placeholder). After
-        # Fix 42 merged //* into REGULAR_COMMENT, the token appears inside
-        # the expression. Make baseExpression accept and ignore REGULAR_COMMENT
-        # in parenthesized position.
-        prev = grammar
-        grammar = grammar.replace(
-            "baseExpression\n    : nullExpression\n    | literalExpression\n",
-            "baseExpression\n"
-            "    : nullExpression\n"
-            "    | REGULAR_COMMENT   // ignore block comments used as expression placeholders\n"
-            "    | literalExpression\n",
-        )
+        # Fix 50 is retained as a historical record. Its expression-placeholder
+        # behavior is superseded by Fix 55 because regular comments are model
+        # comment bodies, not expression operands, in the official grammar.
         self.applied_patches.append(
             {
                 "id": "50",
                 "category": "Conformance fix",
-                "summary": "Allow `REGULAR_COMMENT` as a no-op expression in `baseExpression`",
-                "description": "Analysis Case Usage Example.sysml uses `= ( //* ... */ )` where "
-                "the entire expression is a commented-out placeholder. After Fix 42 unified "
-                "`//*` into `REGULAR_COMMENT`, the token appears inside parenthesized "
-                "expressions. Added `REGULAR_COMMENT` as an alternative in `baseExpression`.",
-                "rules": "baseExpression",
-                "applied": grammar != prev,
+                "summary": "Allow `REGULAR_COMMENT` as a no-op expression in `baseExpression` (superseded)",
+                "description": "The former rule admitted a regular comment as an expression placeholder "
+                "after the old Fix 42 lexer merge. That behavior is superseded by Fix 55 because the "
+                "official OMG KEBNF and Pilot keep `REGULAR_COMMENT` as a comment body token.",
+                "rules": "baseExpression (historical alternative)",
+                "applied": False,
             }
         )
 
@@ -2338,6 +2349,51 @@ class Antlr4Transformer:
             "defaultReferenceUsage\n    : refPrefix usage\n    ;",
             "defaultReferenceUsage\n    : refPrefix usageDeclaration usageCompletion\n    ;",
             rules="defaultReferenceUsage",
+        )
+
+        # Fix 54: Keep the official lexical distinction between regular
+        # comments and multiline notes. ML_NOTE is hidden trivia;
+        # REGULAR_COMMENT remains visible for Comment/Documentation bodies.
+        self.applied_patches.append(
+            {
+                "id": "54",
+                "category": "Conformance fix",
+                "summary": "Keep `REGULAR_COMMENT` distinct from `ML_NOTE`",
+                "description": "The [OMG KerML KEBNF lexical rules](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L32-L46) define `MULTILINE_NOTE` as `'//*' COMMENT_TEXT '*/'` and `REGULAR_COMMENT` as `'/*' COMMENT_TEXT '*/'`. The [official Pilot terminals](https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L569-L578) mirror this with separate hidden `ML_NOTE` and visible `REGULAR_COMMENT` terminals. The generated lexer therefore keeps `ML_NOTE` on the hidden channel and preserves regular comments for model-owned comment, documentation, and textual-representation bodies.",
+                "rules": "REGULAR_COMMENT, ML_NOTE",
+                "applied": True,
+            }
+        )
+
+        # Fix 55: Do not reinterpret a model-owned regular comment as an
+        # expression operand. This restores the official base-expression
+        # boundary after the superseded Fix 50.
+        self.applied_patches.append(
+            {
+                "id": "55",
+                "category": "Conformance fix",
+                "summary": "Keep `REGULAR_COMMENT` out of `baseExpression`",
+                "description": "The [official OMG KEBNF](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L32-L46) and [Pilot expression grammar](https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L349-L378) define `REGULAR_COMMENT` as a model-owned comment body, while `baseExpression` contains only expression productions. Removed the superseded `REGULAR_COMMENT` alternative so regular comments cannot be accepted as no-op expressions.",
+                "rules": "baseExpression",
+                "applied": True,
+            }
+        )
+
+        # Fix 56: Keep the contextual `typed` spelling available as a name.
+        # The official Pilot lexer emits `typed` as ID and its Name rule is
+        # ID | UNRESTRICTED_NAME, so direct OwnedExpression parsing accepts it.
+        # The generated lexer keeps the TYPED token for `typed by` syntax; add
+        # that token to the compatibility name alternative instead of changing
+        # the shared keyword tokenization.
+        self.applied_patches.append(
+            {
+                "id": "56",
+                "category": "Conformance fix",
+                "summary": "Allow `typed` as a contextual name",
+                "description": "The [official Pilot Name rule](https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L534-L550) is `ID | UNRESTRICTED_NAME`, and the direct official lexer emits bare `typed` as `RULE_ID`; the direct `OwnedExpression` probe accepts it. Keep the generated `TYPED` token for `typed by` and add it to `unreservedKeyword` so the ANTLR parser matches that acceptance boundary.",
+                "rules": "unreservedKeyword, name",
+                "applied": True,
+            }
         )
 
         return grammar
@@ -2704,6 +2760,12 @@ class Antlr4Transformer:
         )
         lines.append(
             "// Reference: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1198-L1229"
+        )
+        lines.append(
+            "// Evidence: REGULAR_COMMENT is a model-owned comment body, while ML_NOTE is hidden lexical trivia; neither is a base expression in the official KEBNF or Pilot."
+        )
+        lines.append(
+            "// Reference: KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L32-L46; Pilot https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L349-L378"
         )
         lines.append("baseExpression")
         lines.append("    : nullExpression")
