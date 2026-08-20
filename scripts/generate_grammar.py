@@ -2396,6 +2396,22 @@ class Antlr4Transformer:
             }
         )
 
+        # Fix 57: Preserve recursive conditional operands while making the
+        # OMG precedence and associativity rules explicit for ANTLR. The
+        # paired normal/conditional layers are emitted by
+        # _generate_expression_rules(), so this ledger entry records that
+        # generator-level transformation and its evidence boundary.
+        self.applied_patches.append(
+            {
+                "id": "57",
+                "category": "Precedence and conformance fix",
+                "summary": "Preserve recursive conditional operands with paired precedence layers",
+                "description": "The [OMG KerML 1.0 Clause 8.2.5.8.1, Table 6 and Note 2](https://www.omg.org/spec/KerML/1.0/PDF#page=124) place `if` below all binary operators, require left associativity for binary operators except right-associative exponentiation, and define the precedence order that the ANTLR generator must make explicit. The [KEBNF `OwnedExpression` and `ConditionalExpression` productions](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L932-L947) recursively give all three conditional operands as `OwnedExpression`; [conditional and binary operator groups](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L949-L969) and the [precedence note](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1061-L1064) provide the source structure. `_generate_expression_rules()` therefore emits a normal state and a conditional-containing state for each tier, with the conditional restricted to the final operand of the current chain. This preserves the KEBNF recursion while avoiding an exact ANTLR ambiguity at the conditional `else` boundary. Direct runtime evidence is intentionally disclosed: a locally rebuilt official Pilot from first-party commit `fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa` (artifact SHA-256 `f1e1880b337ed3c50bc65c32599f43ec9148cc4ca47ef91a99c5022ec677d9ac`) rejected the KEBNF-derived probes `a + if b ? c else d`, `-if b ? c else d`, `a ** if b ? c else d`, and `a ?? if b ? c else d`. Because KEBNF is declarative, this is a Pilot acceptance-set discrepancy rather than evidence to narrow the normative grammar; this fix follows the cited OMG/KEBNF recursion and records the implementation difference.",
+                "rules": "ownedExpression, conditionalExpression, operatorExpression, precedence-layer rules",
+                "applied": True,
+            }
+        )
+
         return grammar
 
     def generate_patches_md(self, release_tag: str, grammar_version: str) -> str:
@@ -2536,18 +2552,36 @@ class Antlr4Transformer:
         # below every binary operator:
         # https://www.omg.org/spec/KerML/1.0/PDF#page=124
         # The 2026-05 KEBNF gives `if` three OwnedExpression operands:
-        # https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L939-L948
+        # https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L932-L947
         lines.append(
             "// Evidence: KerML 1.0 Clause 8.2.5.8.1 Table 6 makes `if` the lowest-precedence operator."
         )
         lines.append(
-            "// Reference: https://www.omg.org/spec/KerML/1.0/PDF#page=124 and KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L939-L948"
+            "// Reference: https://www.omg.org/spec/KerML/1.0/PDF#page=124 and KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L932-L947"
         )
         lines.append("ownedExpression")
+        lines.append("    : operatorExpression")
+        lines.append("    ;")
+        lines.append("")
+        lines.append(
+            "// Evidence: KEBNF `ConditionalExpression` has three `OwnedExpression` operands; paired conditional layers make that recursion available as a final operand without an ANTLR exact ambiguity between an `else` branch and an outer trailing operator."
+        )
+        lines.append(
+            "// Reference: KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L932-L947 and argument recursion https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1003-L1010"
+        )
+        lines.append(
+            "// Direct runtime evidence: a locally rebuilt official Pilot from first-party commit `fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa` rejected the four KEBNF-derived conditional-operand probes `a + if b ? c else d`, `-if b ? c else d`, `a ** if b ? c else d`, and `a ?? if b ? c else d`."
+        )
+        lines.append(
+            "// This is a disclosed Pilot acceptance-set discrepancy (artifact SHA-256 `f1e1880b337ed3c50bc65c32599f43ec9148cc4ca47ef91a99c5022ec677d9ac`); KEBNF is declarative, so its result is derived from the cited productions rather than executed."
+        )
+        lines.append(
+            "// Pilot source: [ConditionalExpression](https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L43-L57); normative source: [KEBNF OwnedExpression and ConditionalExpression](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L932-L947)."
+        )
+        lines.append("conditionalExpression")
         lines.append(
             "    : IF ownedExpression QUESTION ownedExpression ELSE ownedExpression"
         )
-        lines.append("    | operatorExpression")
         lines.append("    ;")
         lines.append("")
 
@@ -2562,6 +2596,7 @@ class Antlr4Transformer:
         )
         lines.append("operatorExpression")
         lines.append("    : nullCoalescingExpression")
+        lines.append("    | nullCoalescingConditionalExpression")
         lines.append("    ;")
         lines.append("")
 
@@ -2579,32 +2614,105 @@ class Antlr4Transformer:
         lines.append(
             "// Reference: KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L949-L969; normative precedence and associativity: KerML 1.0 Clause 8.2.5.8.1 Table 6 and Note 2 https://www.omg.org/spec/KerML/1.0/PDF#page=124"
         )
+
+        # Every binary tier has a normal state and a conditional-containing
+        # state. The latter permits a conditional expression only as the final
+        # operand in the current chain. Operators after the conditional's
+        # `else` therefore remain owned by that branch's full OwnedExpression,
+        # rather than competing with an outer chain.
+        def emit_left_layer(
+            normal_name: str,
+            conditional_name: str,
+            child_normal: str,
+            child_conditional: str,
+            operators: str,
+        ) -> None:
+            lines.append(normal_name)
+            lines.append(f"    : {child_normal} ( {operators} {child_normal} )*")
+            lines.append("    ;")
+            lines.append("")
+            lines.append(conditional_name)
+            lines.append(
+                f"    : {child_normal} ( {operators} {child_normal} )* {operators} {child_conditional}"
+            )
+            lines.append(f"    | {child_conditional}")
+            lines.append("    ;")
+            lines.append("")
+
+        lines.append(
+            "// Ambiguity control: every conditional-containing layer ends with exactly one conditional child, so the current tier cannot consume an operator after that conditional; the branch's recursive `OwnedExpression` owns it instead."
+        )
+        lines.append(
+            "// This paired-state invariant preserves KEBNF recursion while avoiding an exact ANTLR ambiguity at the conditional `else` boundary."
+        )
+        lines.append(
+            "// References: [KerML 1.0 Clause 8.2.5.8.1, Table 6 and Note 2](https://www.omg.org/spec/KerML/1.0/PDF#page=124); [KEBNF precedence note](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1061-L1064)."
+        )
+        lines.append(
+            "// Local tier evidence: `??` is the lowest binary tier and belongs to KEBNF `ConditionalBinaryOperatorExpression`; the direct Pilot grammar defines it as `NullCoalescingExpression`."
+        )
+        lines.append(
+            "// References: [KEBNF ConditionalBinaryOperatorExpression](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L949-L953); [Pilot NullCoalescingExpression](https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L63-L72)."
+        )
         lines.append("nullCoalescingExpression")
         lines.append("    : impliesExpression ( QUESTION_QUESTION impliesExpression )*")
         lines.append("    ;")
         lines.append("")
-        lines.append("impliesExpression")
-        lines.append("    : orExpression ( IMPLIES orExpression )*")
-        lines.append("    ;")
-        lines.append("")
-        lines.append("orExpression")
-        lines.append("    : xorExpression ( ( PIPE | OR ) xorExpression )*")
-        lines.append("    ;")
-        lines.append("")
-        lines.append("xorExpression")
-        lines.append("    : andExpression ( XOR andExpression )*")
-        lines.append("    ;")
-        lines.append("")
-        lines.append("andExpression")
-        lines.append("    : equalityExpression ( ( AMP | AND ) equalityExpression )*")
-        lines.append("    ;")
-        lines.append("")
-        lines.append("equalityExpression")
+        lines.append("nullCoalescingConditionalExpression")
         lines.append(
-            "    : classificationExpression ( ( EQ_EQ | BANG_EQ | EQ_EQ_EQ | BANG_EQ_EQ ) classificationExpression )*"
+            "    : impliesExpression ( QUESTION_QUESTION impliesExpression )* QUESTION_QUESTION impliesConditionalExpression"
         )
+        lines.append("    | impliesConditionalExpression")
         lines.append("    ;")
         lines.append("")
+
+        lines.append(
+            "// Local tier evidence: `implies`, `or`, `xor`, and `and` are the remaining conditional-binary tiers; each repeated operator is left-associative and follows Table 6's high-to-low ordering."
+        )
+        lines.append(
+            "// References: [KEBNF ConditionalBinaryOperatorExpression](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L949-L953); [Pilot logical expression rules](https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L74-L144)."
+        )
+        emit_left_layer(
+            "impliesExpression",
+            "impliesConditionalExpression",
+            "orExpression",
+            "orConditionalExpression",
+            "IMPLIES",
+        )
+        emit_left_layer(
+            "orExpression",
+            "orConditionalExpression",
+            "xorExpression",
+            "xorConditionalExpression",
+            "( PIPE | OR )",
+        )
+        emit_left_layer(
+            "xorExpression",
+            "xorConditionalExpression",
+            "andExpression",
+            "andConditionalExpression",
+            "XOR",
+        )
+        emit_left_layer(
+            "andExpression",
+            "andConditionalExpression",
+            "equalityExpression",
+            "equalityConditionalExpression",
+            "( AMP | AND )",
+        )
+        lines.append(
+            "// Local tier evidence: equality is above `and` and below classification; classification remains a single optional suffix between relational and equality."
+        )
+        lines.append(
+            "// References: [KEBNF BinaryOperatorExpression](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L958-L969); [KEBNF ClassificationExpression](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L974-L997); [Pilot equality and classification rules](https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L146-L183)."
+        )
+        emit_left_layer(
+            "equalityExpression",
+            "equalityConditionalExpression",
+            "classificationExpression",
+            "classificationConditionalExpression",
+            "( EQ_EQ | BANG_EQ | EQ_EQ_EQ | BANG_EQ_EQ )",
+        )
 
         # KerML 1.0 Clause 8.2.5.8.1 places classification between relational
         # and equality, and its ClassificationExpression has one optional
@@ -2640,30 +2748,57 @@ class Antlr4Transformer:
         lines.append("    ;")
         lines.append("")
 
-        lines.append("relationalExpression")
-        lines.append("    : rangeExpression ( ( LT | GT | LE | GE ) rangeExpression )*")
-        lines.append("    ;")
-        lines.append("")
-        lines.append("rangeExpression")
-        lines.append("    : additiveExpression ( DOT_DOT additiveExpression )*")
-        lines.append("    ;")
-        lines.append("")
-        lines.append("additiveExpression")
         lines.append(
-            "    : multiplicativeExpression ( ( PLUS | MINUS ) multiplicativeExpression )*"
+            "// Local tier evidence: relational, range, additive, and multiplicative layers follow the KEBNF `BinaryOperatorExpression` family and are left-associative under Table 6."
         )
-        lines.append("    ;")
-        lines.append("")
-        lines.append("multiplicativeExpression")
         lines.append(
-            "    : exponentiationExpression ( ( STAR | SLASH | PERCENT ) exponentiationExpression )*"
+            "// References: [KEBNF BinaryOperatorExpression](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L958-L969); [Pilot relational through multiplicative rules](https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L233-L269)."
         )
-        lines.append("    ;")
-        lines.append("")
+        emit_left_layer(
+            "relationalExpression",
+            "relationalConditionalExpression",
+            "rangeExpression",
+            "rangeConditionalExpression",
+            "( LT | GT | LE | GE )",
+        )
+        emit_left_layer(
+            "rangeExpression",
+            "rangeConditionalExpression",
+            "additiveExpression",
+            "additiveConditionalExpression",
+            "DOT_DOT",
+        )
+        emit_left_layer(
+            "additiveExpression",
+            "additiveConditionalExpression",
+            "multiplicativeExpression",
+            "multiplicativeConditionalExpression",
+            "( PLUS | MINUS )",
+        )
+        emit_left_layer(
+            "multiplicativeExpression",
+            "multiplicativeConditionalExpression",
+            "exponentiationExpression",
+            "exponentiationConditionalExpression",
+            "( STAR | SLASH | PERCENT )",
+        )
+        lines.append(
+            "// Local tier evidence: exponentiation is above multiplicative operators and is the only right-associative binary tier in KerML Table 6 and Note 2."
+        )
+        lines.append(
+            "// References: [KerML 1.0 Clause 8.2.5.8.1, Table 6 and Note 2](https://www.omg.org/spec/KerML/1.0/PDF#page=124); [KEBNF BinaryOperatorExpression](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L958-L969); [Pilot ExponentiationExpression](https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L271-L278)."
+        )
         lines.append("exponentiationExpression")
         lines.append(
             "    : unaryExpression ( ( STAR_STAR | CARET ) exponentiationExpression )?"
         )
+        lines.append("    ;")
+        lines.append("")
+        lines.append("exponentiationConditionalExpression")
+        lines.append(
+            "    : unaryExpression ( ( STAR_STAR | CARET ) exponentiationConditionalExpression )"
+        )
+        lines.append("    | unaryConditionalExpression")
         lines.append("    ;")
         lines.append("")
 
@@ -2675,11 +2810,20 @@ class Antlr4Transformer:
             "// Evidence: KerML 1.0 Table 6 places `all` and unary operators above every binary tier; the KEBNF defines `all` as an extent expression."
         )
         lines.append(
-            "// Reference: https://www.omg.org/spec/KerML/1.0/PDF#page=124 and KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1027-L1043"
+            "// References: [KerML 1.0 Clause 8.2.5.8.1, Table 6](https://www.omg.org/spec/KerML/1.0/PDF#page=124); [KEBNF ExtentExpression and UnaryOperatorExpression](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L971-L977); [Pilot UnaryExpression](https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L280-L295)."
         )
         lines.append("unaryExpression")
         lines.append("    : ( PLUS | MINUS | TILDE | NOT ) unaryExpression")
         lines.append("    | extentExpression")
+        lines.append("    ;")
+        lines.append("")
+        lines.append("unaryConditionalExpression")
+        lines.append("    : ( PLUS | MINUS | TILDE | NOT ) unaryConditionalExpression")
+        lines.append("    | conditionalExpression")
+        lines.append("    ;")
+        lines.append("")
+        lines.append("classificationConditionalExpression")
+        lines.append("    : relationalConditionalExpression")
         lines.append("    ;")
         lines.append("")
         lines.append("extentExpression")

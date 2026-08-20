@@ -5,8 +5,8 @@ OMG SysML v2 KEBNF specification when translated to ANTLR4.
 
 - **Grammar version**: `2026.05.2`
 - **OMG release**: `2026-05`
-- **Total patches**: 56
-- **Applied**: 53
+- **Total patches**: 57
+- **Applied**: 54
 - **Skipped**: 3
 
 ## Spec BNF fix
@@ -450,6 +450,18 @@ Fix 23 intentionally broadens `usage` for anonymous usage syntax, but the normat
 Removed 43 parser rules unreachable from `rootNamespace`. These include merged rules (Fix 11 and other normalization passes left definitions behind), feature chain rules (merged into `qualifiedName ( DOT qualifiedName )*` patterns), and metamodel wrapper passthroughs (e.g., `bodyArgumentMember : bodyArgument`) that exist in the KEBNF for type annotations with no ANTLR4 equivalent. Reduces the grammar by ~9%, resulting in smaller ATN serialization, fewer DFA decisions, shallower parse trees, and fewer generated Context classes.
 
 **Affected rules**: (43 rules removed — see commit for full list)
+
+## Precedence and conformance fix
+
+| # | Summary | Rules | Applied |
+|---|---------|-------|---------|
+| 57 | Preserve recursive conditional operands with paired precedence layers | ownedExpression, conditionalExpression, operatorExpression, precedence-layer rules | Yes |
+
+### Fix 57: Preserve recursive conditional operands with paired precedence layers
+
+The [OMG KerML 1.0 Clause 8.2.5.8.1, Table 6 and Note 2](https://www.omg.org/spec/KerML/1.0/PDF#page=124) place `if` below all binary operators, require left associativity for binary operators except right-associative exponentiation, and define the precedence order that the ANTLR generator must make explicit. The [KEBNF `OwnedExpression` and `ConditionalExpression` productions](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L932-L947) recursively give all three conditional operands as `OwnedExpression`; [conditional and binary operator groups](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L949-L969) and the [precedence note](https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1061-L1064) provide the source structure. `_generate_expression_rules()` therefore emits a normal state and a conditional-containing state for each tier, with the conditional restricted to the final operand of the current chain. This preserves the KEBNF recursion while avoiding an exact ANTLR ambiguity at the conditional `else` boundary. Direct runtime evidence is intentionally disclosed: a locally rebuilt official Pilot from first-party commit `fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa` (artifact SHA-256 `f1e1880b337ed3c50bc65c32599f43ec9148cc4ca47ef91a99c5022ec677d9ac`) rejected the KEBNF-derived probes `a + if b ? c else d`, `-if b ? c else d`, `a ** if b ? c else d`, and `a ?? if b ? c else d`. Because KEBNF is declarative, this is a Pilot acceptance-set discrepancy rather than evidence to narrow the normative grammar; this fix follows the cited OMG/KEBNF recursion and records the implementation difference.
+
+**Affected rules**: ownedExpression, conditionalExpression, operatorExpression, precedence-layer rules
 
 ---
 

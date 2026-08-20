@@ -285,14 +285,35 @@ public final class ExpressionGrammarTest {
         cases.add(invalid("locale"));
         cases.add(invalid("crosses"));
         cases.add(valid("typed"));
-        // The abstract KEBNF derives these through OwnedExpression operands,
-        // but the released Pilot's concrete precedence grammar rejects them.
-        // Keep that implementation boundary explicit until a deterministic
-        // recursive-operand grammar is available.
-        cases.add(invalid("a + if b ? c else d"));
-        cases.add(invalid("-if b ? c else d"));
-        cases.add(invalid("a ** if b ? c else d"));
-        cases.add(invalid("a ?? if b ? c else d"));
+        // KEBNF derives these through recursive OwnedExpression operands.
+        // The paired normal/conditional layers preserve that derivation while
+        // keeping the `else` branch and any outer trailing operator unambiguous.
+        cases.add(valid("a + if b ? c else d"));
+        cases.add(valid("-if b ? c else d"));
+        cases.add(valid("a ** if b ? c else d"));
+        cases.add(valid("a ?? if b ? c else d"));
+        cases.add(valid("a + if b ? c else d + e"));
+        cases.add(valid("a + if b ? c else d ?? e"));
+        cases.add(valid("a + if b ? c else d + if e ? f else g"));
+        // Exercise every binary tier with an unparenthesized conditional
+        // operand. The paired generated layers must accept each form without
+        // an exact ambiguity while the official Pilot remains a separate,
+        // intentionally narrower runtime reference.
+        String conditionalOperand = "if b ? c else d";
+        String[] conditionalOperandOperators = {
+            "??", "implies", "|", "or", "xor", "&", "and", "==", "!=", "===", "!==",
+            "<", ">", "<=", ">=", "..", "+", "-", "*", "/", "%", "**", "^"
+        };
+        for (String operator : conditionalOperandOperators) {
+            cases.add(valid("a " + operator + " " + conditionalOperand));
+        }
+        cases.add(valid("+" + conditionalOperand));
+        cases.add(valid("-" + conditionalOperand));
+        cases.add(valid("~" + conditionalOperand));
+        cases.add(valid("not " + conditionalOperand));
+        cases.add(valid("if if a ? b else c ? d else e"));
+        cases.add(valid("if a ? if b ? c else d else e"));
+        cases.add(valid("if a ? b else if c ? d else e"));
         cases.add(invalid("a.{;;}"));
         cases.add(invalid("a.{; x}"));
         cases.add(invalid("a.{x;; y}"));
