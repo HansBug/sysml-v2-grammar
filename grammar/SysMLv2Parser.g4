@@ -102,7 +102,7 @@ extentExpression
     ;
 
 // Evidence: KerML 1.0 Clause 8.2.5.8.2 defines only the listed primary postfix forms; brackets and index expressions require non-empty sequences, while arrow operations require a body, function reference, or argument list.
-// Reference: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1078-L1178 and Pilot https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L300-L324
+// Reference: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1068-L1178 and Pilot https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L300-L324
 // Observed PR #10 behavior under ANTLR 4.13.2: `a[]`, `a#()`, and `a(b)(c)` were accepted, while `a.{b}` and `a->F g` were rejected; this structure follows the KEBNF forms instead.
 primaryExpression
     : baseExpression
@@ -169,7 +169,7 @@ constructorExpression
     ;
 
 // Evidence: the normative KerML KEBNF defines ExpressionBody as `{ FunctionBodyPart }` (FunctionBodyPart permits type-body members plus an optional result); the SysML KEBNF defines CalculationBody with `';'` and a braced form; the official SysML Pilot overrides ExpressionBody with CalculationBody.
-// Reference: KerML KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L876-L891; SysML KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/SysML-textual-bnf.kebnf#L1353-L1378; SysML Pilot CalculationBody https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L1939-L1969 and override https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L2434-L2439
+// Reference: KerML FunctionBody https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L876-L877; FunctionBodyPart https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L879-L883; ExpressionBody https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1253-L1260; SysML CalculationBody https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/SysML-textual-bnf.kebnf#L1363-L1378; SysML Pilot CalculationBody https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L1947-L1969 and override https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L2436-L2439
 // This combined SysML grammar follows the first-party SysML override: the braced branch accepts body parameters, action/return members, and a final result, while the semicolon branch preserves the official empty-body form. Using generic FunctionBodyPart here would make a bare result such as `a.{ x }` compete with a type-body feature member.
 bodyExpression
     : SEMI
@@ -804,7 +804,7 @@ functionBody
     ;
 
 // Evidence: KerML `FunctionBodyPart` contains repeated type-body/return members followed by at most one result expression; the intermediate `definitionBodyItem` extension is not normative and makes `a.{ x }` exactly ambiguous.
-// Reference: KerML KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L879-L883; official Pilot https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.xtext/src/org/omg/kerml/xtext/KerML.xtext#L933-L941
+// Reference: KerML FunctionBodyPart https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L879-L883; official Pilot counterpart https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.xtext/src/org/omg/kerml/xtext/KerML.xtext#L933-L941
 functionBodyPart
     : ( typeBodyElement | returnFeatureMember )* ( resultExpressionMember )?
     ;

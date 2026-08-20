@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import shutil
 import subprocess
 import sys
@@ -35,8 +36,11 @@ GRAMMAR_CLASS_DIR = BUILD_DIR / "antlr-test" / "grammar"
 GRAMMAR_STAMP = BUILD_DIR / "antlr-test" / ".grammar.sha256"
 FIXTURES_DIR = ROOT / "test" / "fixtures" / "conformance"
 
-LIBRARY_REPO = "Systems-Modeling/SysML-v2-Release"
-LIBRARY_REVISION = "de1070ae8e79c21532b8004fc663d47b35d0e9fa"
+with (ROOT / "scripts" / "config.json").open(encoding="utf-8") as config_file:
+    RELEASE_CONFIG = json.load(config_file)
+
+LIBRARY_REPO = RELEASE_CONFIG["release_repo"]
+LIBRARY_REVISION = RELEASE_CONFIG["release_revision"]
 LIBRARY_ARCHIVE = f"https://github.com/{LIBRARY_REPO}/archive/{LIBRARY_REVISION}.tar.gz"
 
 # Standard library ships with the repo (committed)
@@ -79,10 +83,11 @@ class SuiteResult:
     label: str
     total: int
     failures: list[ParseFailure] = field(default_factory=list)
+    missing: bool = False
 
     @property
     def passed(self) -> bool:
-        return len(self.failures) == 0
+        return not self.failures and not self.missing
 
 
 def find_files(directory: Path, extensions: list[str]) -> list[Path]:
@@ -189,8 +194,15 @@ def run_suite(name: str, suite: dict) -> SuiteResult:
     files = find_files(directory, extensions)
 
     if not files:
-        print(f"  ⚠  {label}: no files found (run --fetch to download)")
-        return SuiteResult(name=name, label=label, total=0)
+        message = "No fixture files found (run --fetch to download)"
+        print(f"  ❌ {label}: {message}")
+        return SuiteResult(
+            name=name,
+            label=label,
+            total=0,
+            failures=[ParseFailure(file=str(directory), stderr=message)],
+            missing=True,
+        )
 
     failures: list[ParseFailure] = []
     for f in files:
@@ -307,10 +319,12 @@ def main() -> None:
         result = run_suite(name, suite)
         results.append(result)
 
-        if result.total == 0:
-            continue
-
-        if result.passed:
+        if result.missing:
+            any_failure = True
+            if args.verbose:
+                for failure in result.failures:
+                    print(f"       ✗ {failure.file} — {failure.stderr}")
+        elif result.passed:
             print(f"  ✅ {result.label}: {result.total}/{result.total} passed")
         else:
             any_failure = True

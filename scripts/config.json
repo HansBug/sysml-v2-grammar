@@ -1,5 +1,6 @@
 {
   "release_tag": "2026-05",
+  "release_revision": "de1070ae8e79c21532b8004fc663d47b35d0e9fa",
   "grammar_version": "2026.05.2",
   "release_repo": "Systems-Modeling/SysML-v2-Release",
   "bnf_files": {

@@ -2207,15 +2207,18 @@ class Antlr4Transformer:
         # FunctionBodyPart here makes a bare result such as `a.{ x }` compete
         # with TypeBodyElement, producing an exact ANTLR ambiguity and an
         # unstable tree. Sources:
-        #   KerML KEBNF: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L876-L891
-        #   SysML KEBNF: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/SysML-textual-bnf.kebnf#L1353-L1378
-        #   SysML Pilot: https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L1939-L1969 and https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L2434-L2439
+        #   KerML FunctionBody: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L876-L877
+        #   KerML FunctionBodyPart: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L879-L883
+        #   KerML ExpressionBody: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1253-L1260
+        #   SysML CalculationBody: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/SysML-textual-bnf.kebnf#L1363-L1378
+        #   SysML Pilot CalculationBody: https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L1947-L1969
+        #   SysML Pilot override: https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L2436-L2439
         prev = grammar
         grammar = grammar.replace(
             "functionBodyPart\n"
             "    : ( typeBodyElement | returnFeatureMember )* ( resultExpressionMember )?\n",
             "// Evidence: KerML `FunctionBodyPart` contains repeated type-body/return members followed by at most one result expression; the intermediate `definitionBodyItem` extension is not normative and makes `a.{ x }` exactly ambiguous.\n"
-            "// Reference: KerML KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L879-L883; official Pilot https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.xtext/src/org/omg/kerml/xtext/KerML.xtext#L933-L941\n"
+            "// Reference: KerML FunctionBodyPart https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L879-L883; official Pilot counterpart https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.xtext/src/org/omg/kerml/xtext/KerML.xtext#L933-L941\n"
             "functionBodyPart\n"
             "    : ( typeBodyElement | returnFeatureMember )* ( resultExpressionMember )?\n",
         )
@@ -2227,8 +2230,9 @@ class Antlr4Transformer:
                 "description": "KerML KEBNF defines `ExpressionBody` as `{ FunctionBodyPart }`, "
                 "whereas the SysML KEBNF defines `CalculationBody` and the official SysML Pilot "
                 "overrides it with that production "
-                "(KerML KEBNF lines 876-891; SysML KEBNF lines 1353-1378; SysML Pilot `SysML.xtext` "
-                "lines 1939-1969 and 2434-2439). "
+                "(KerML FunctionBody lines 876-877, FunctionBodyPart lines 879-883, and "
+                "ExpressionBody lines 1253-1260; SysML CalculationBody lines 1363-1378; "
+                "SysML Pilot `SysML.xtext` lines 1947-1969 and 2436-2439). "
                 "This SysML grammar follows the first-party override: `calculationBodyPart` preserves "
                 "action/return members and private attributes, keeps the final result expression, and "
                 "removes the exact `TypeBodyElement` versus result ambiguity for `a.{ x }`; the `SEMI` "
@@ -2616,7 +2620,7 @@ class Antlr4Transformer:
         # expression followed by feature chaining and the explicit postfix
         # forms below. It does not define a generic postfix argument-list
         # operator. Source:
-        # https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1078-L1178
+        # https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1068-L1178
         # The official Pilot uses the same base/operation structure:
         # https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L300-L324
         # KEBNF requires a non-empty sequence for `[]` and `#()`, permits
@@ -2627,7 +2631,7 @@ class Antlr4Transformer:
             "// Evidence: KerML 1.0 Clause 8.2.5.8.2 defines only the listed primary postfix forms; brackets and index expressions require non-empty sequences, while arrow operations require a body, function reference, or argument list."
         )
         lines.append(
-            "// Reference: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1078-L1178 and Pilot https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L300-L324"
+            "// Reference: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1068-L1178 and Pilot https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L300-L324"
         )
         lines.append(
             "// Observed PR #10 behavior under ANTLR 4.13.2: `a[]`, `a#()`, and `a(b)(c)` were accepted, while `a.{b}` and `a->F g` were rejected; this structure follows the KEBNF forms instead."
@@ -2737,7 +2741,7 @@ class Antlr4Transformer:
             "// Evidence: the normative KerML KEBNF defines ExpressionBody as `{ FunctionBodyPart }` (FunctionBodyPart permits type-body members plus an optional result); the SysML KEBNF defines CalculationBody with `';'` and a braced form; the official SysML Pilot overrides ExpressionBody with CalculationBody."
         )
         lines.append(
-            "// Reference: KerML KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L876-L891; SysML KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/SysML-textual-bnf.kebnf#L1353-L1378; SysML Pilot CalculationBody https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L1939-L1969 and override https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L2434-L2439"
+            "// Reference: KerML FunctionBody https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L876-L877; FunctionBodyPart https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L879-L883; ExpressionBody https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1253-L1260; SysML CalculationBody https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/SysML-textual-bnf.kebnf#L1363-L1378; SysML Pilot CalculationBody https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L1947-L1969 and override https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L2436-L2439"
         )
         lines.append(
             "// This combined SysML grammar follows the first-party SysML override: the braced branch accepts body parameters, action/return members, and a final result, while the semicolon branch preserves the official empty-body form. Using generic FunctionBodyPart here would make a bare result such as `a.{ x }` compete with a type-body feature member."

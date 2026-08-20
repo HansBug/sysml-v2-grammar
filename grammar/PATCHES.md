@@ -407,7 +407,7 @@ Analysis Case Usage Example.sysml uses `= ( //* ... */ )` where the entire expre
 
 ### Fix 51: Use `calculationBodyPart` for expression bodies
 
-KerML KEBNF defines `ExpressionBody` as `{ FunctionBodyPart }`, whereas the SysML KEBNF defines `CalculationBody` and the official SysML Pilot overrides it with that production (KerML KEBNF lines 876-891; SysML KEBNF lines 1353-1378; SysML Pilot `SysML.xtext` lines 1939-1969 and 2434-2439). This SysML grammar follows the first-party override: `calculationBodyPart` preserves action/return members and private attributes, keeps the final result expression, and removes the exact `TypeBodyElement` versus result ambiguity for `a.{ x }`; the `SEMI` alternative is retained because it is part of the official `CalculationBody` production.
+KerML KEBNF defines `ExpressionBody` as `{ FunctionBodyPart }`, whereas the SysML KEBNF defines `CalculationBody` and the official SysML Pilot overrides it with that production (KerML FunctionBody lines 876-877, FunctionBodyPart lines 879-883, and ExpressionBody lines 1253-1260; SysML CalculationBody lines 1363-1378; SysML Pilot `SysML.xtext` lines 1947-1969 and 2436-2439). This SysML grammar follows the first-party override: `calculationBodyPart` preserves action/return members and private attributes, keeps the final result expression, and removes the exact `TypeBodyElement` versus result ambiguity for `a.{ x }`; the `SEMI` alternative is retained because it is part of the official `CalculationBody` production.
 
 **Affected rules**: bodyExpression, functionBodyPart
 
