@@ -420,35 +420,6 @@ class KebnfParser:
 # ANTLR4 Transformer
 # ---------------------------------------------------------------------------
 
-# Operator precedence from SysML v2 spec Table 6 (lowest to highest)
-OPERATOR_PRECEDENCE = [
-    # (operators, name, associativity)
-    (["if"], "conditional", "none"),  # Ternary if ? : else
-    (["??"], "nullCoalescing", "left"),
-    (["implies"], "implies", "left"),
-    (["or"], "logicalOr", "left"),
-    (["and"], "logicalAnd", "left"),
-    (["xor"], "xor", "left"),
-    (["|"], "bitwiseOr", "left"),
-    (["&"], "bitwiseAnd", "left"),
-    (["==", "!=", "===", "!=="], "equality", "left"),
-    (["<", ">", "<=", ">="], "relational", "left"),
-    ([".."], "range", "left"),
-    (["+", "-"], "additive", "left"),
-    (["*", "/", "%"], "multiplicative", "left"),
-    (["**", "^"], "exponentiation", "right"),
-]
-
-UNARY_OPERATORS = ["+", "-", "~", "not"]
-
-CLASSIFICATION_OPERATORS = ["istype", "hastype", "@"]
-CAST_OPERATOR = "as"
-META_CLASSIFICATION_OPERATORS = ["@@"]
-META_CAST_OPERATOR = "meta"
-
-# Primary expression postfix operators
-POSTFIX_OPERATORS = [".", ".?", "->", "#", "["]
-
 
 class Antlr4Transformer:
     """Transforms parsed .kebnf rules into ANTLR4 grammar strings."""
@@ -647,7 +618,7 @@ class Antlr4Transformer:
         lines.append("")
 
         # Generate expression rules with proper precedence
-        lines.append("// ===== Expression rules (precedence-climbing) =====")
+        lines.append("// ===== Expression rules (explicit precedence layers) =====")
         lines.append("")
         lines.extend(self._generate_expression_rules())
         lines.append("")
@@ -1414,22 +1385,6 @@ class Antlr4Transformer:
             "    ;",
             "resultExpressionMember\n    : memberPrefix? ownedExpression\n    ;",
             rules="resultExpressionMember",
-        )
-
-        # Fix 22: SLL baseExpression optimization.
-        patch(
-            "22",
-            "SLL prediction fix",
-            "Merge expression alternatives in `baseExpression`",
-            "Merged `featureReferenceExpression`, `metadataAccessExpression`, and "
-            "`invocationExpression` into a single alternative that avoids SLL prediction "
-            "ambiguity on `qualifiedName` lookahead.",
-            "    | featureReferenceExpression\n"
-            "    | metadataAccessExpression\n"
-            "    | invocationExpression\n",
-            "    | qualifiedName ( argumentList | DOT METADATA )?   "
-            "// merged featureRef/metadataAccess/invocation\n",
-            rules="baseExpression",
         )
 
         # Fix 23: Make usageDeclaration optional and add featureSpecializationPart.
@@ -2284,34 +2239,6 @@ class Antlr4Transformer:
             }
         )
 
-        # Fix 53: Add metadata cast expression to baseExpression.
-        # SysML v2 allows parenthesized cast syntax `(as MetadataType)` to cast
-        # a metadata annotation to a specific metadata definition type. This
-        # construct is not present in the OMG KEBNF grammar but is used in
-        # practice. The alternative must appear before the parenthesized
-        # sequence expression `LPAREN sequenceExpressionList? RPAREN` to avoid
-        # being consumed as a grouped expression.
-        prev = grammar
-        grammar = grammar.replace(
-            "    | LPAREN sequenceExpressionList? RPAREN\n    ;",
-            "    | LPAREN AS typeReference RPAREN   // metadata cast expression: (as MetadataType)\n"
-            "    | LPAREN sequenceExpressionList? RPAREN\n    ;",
-        )
-        self.applied_patches.append(
-            {
-                "id": "53",
-                "category": "Extension",
-                "summary": "Add metadata cast expression `(as Type)` to `baseExpression`",
-                "description": "SysML v2 allows `(as MetadataType)` as a parenthesized cast "
-                "expression to narrow a metadata annotation to a specific metadata definition "
-                "type. Added `LPAREN AS typeReference RPAREN` as an alternative in "
-                "`baseExpression`, placed before the parenthesized sequence expression to "
-                "avoid ambiguity.",
-                "rules": "baseExpression",
-                "applied": grammar != prev,
-            }
-        )
-
         # Fix 52: Remove unreachable parser rules
         # These rules exist in the KEBNF for metamodel type annotations but are
         # unreachable from rootNamespace in the ANTLR4 grammar. They fall into:
@@ -2319,8 +2246,6 @@ class Antlr4Transformer:
         #   - Feature chain rules (merged into qualifiedName patterns)
         #   - Metamodel wrapper passthroughs (no ANTLR4 equivalent)
         dead_rules = [
-            "metadataAccessExpression",
-            "invocationExpression",
             "ownedFeatureChain",
             "featureChain",
             "ownedFeatureChaining",
@@ -2385,7 +2310,7 @@ class Antlr4Transformer:
                 "category": "Dead rule removal",
                 "summary": f"Remove {removed_count} unreachable parser rules",
                 "description": f"Removed {removed_count} parser rules unreachable from `rootNamespace`. "
-                "These include merged rules (Fixes 11/22 left definitions behind), "
+                "These include merged rules (Fix 11 and other normalization passes left definitions behind), "
                 "feature chain rules (merged into `qualifiedName ( DOT qualifiedName )*` patterns), "
                 "and metamodel wrapper passthroughs (e.g., `bodyArgumentMember : bodyArgument`) "
                 "that exist in the KEBNF for type annotations with no ANTLR4 equivalent. "
@@ -2526,12 +2451,23 @@ class Antlr4Transformer:
         """Generate ANTLR4 expression rules with proper precedence.
 
         This converts the flat .kebnf expression grammar (which uses implicit
-        precedence from spec Table 6) into ANTLR4's native left-recursive
-        precedence-climbing format.
+        precedence from spec Table 6) into explicit precedence layers. The
+        normative grammar leaves precedence implicit, so the generated ANTLR
+        rules must make both precedence and associativity explicit.
         """
         lines = []
 
-        # Conditional expressions have the lowest precedence.
+        # KerML 1.0 Clause 8.2.5.8.1, Table 6 lists the ternary `if` operator
+        # below every binary operator:
+        # https://www.omg.org/spec/KerML/1.0/PDF#page=124
+        # The 2026-05 KEBNF gives `if` three OwnedExpression operands:
+        # https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L939-L948
+        lines.append(
+            "// Evidence: KerML 1.0 Clause 8.2.5.8.1 Table 6 makes `if` the lowest-precedence operator."
+        )
+        lines.append(
+            "// Reference: https://www.omg.org/spec/KerML/1.0/PDF#page=124 and KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L939-L948"
+        )
         lines.append("ownedExpression")
         lines.append(
             "    : IF ownedExpression QUESTION ownedExpression ELSE ownedExpression"
@@ -2540,56 +2476,172 @@ class Antlr4Transformer:
         lines.append("    ;")
         lines.append("")
 
-        # Binary operator precedence.
+        # The wrapper preserves PR #10's operatorExpression entry point while
+        # the rules below encode the official high-to-low Table 6 order without
+        # relying on ANTLR direct-left-recursion alternative numbering.
+        lines.append(
+            "// Evidence: KerML 1.0 Clause 8.2.5.8.1 Note 2 says KEBNF precedence is implicit, all binary operators are left-associative except exponentiation, and Table 6 orders these tiers from high to low."
+        )
+        lines.append(
+            "// Reference: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1061-L1064"
+        )
         lines.append("operatorExpression")
-        lines.append("    : unaryExpression")
-        lines.append(
-            "    | <assoc=right> operatorExpression ( STAR_STAR | CARET ) operatorExpression"
-        )
-        lines.append(
-            "    | operatorExpression ( STAR | SLASH | PERCENT ) operatorExpression"
-        )
-        lines.append("    | operatorExpression ( PLUS | MINUS ) operatorExpression")
-        lines.append("    | operatorExpression DOT_DOT operatorExpression")
-        lines.append(
-            "    | operatorExpression ( LT | GT | LE | GE ) operatorExpression"
-        )
-        lines.append(
-            "    | operatorExpression ( ISTYPE | HASTYPE | AT_SIGN | AT_AT | AS | META ) typeReference"
-        )
-        lines.append(
-            "    | operatorExpression ( EQ_EQ | BANG_EQ | EQ_EQ_EQ | BANG_EQ_EQ ) operatorExpression"
-        )
-        lines.append("    | operatorExpression ( AMP | AND ) operatorExpression")
-        lines.append("    | operatorExpression XOR operatorExpression")
-        lines.append("    | operatorExpression ( PIPE | OR ) operatorExpression")
-        lines.append("    | operatorExpression IMPLIES operatorExpression")
-        lines.append("    | operatorExpression QUESTION_QUESTION operatorExpression")
+        lines.append("    : nullCoalescingExpression")
         lines.append("    ;")
         lines.append("")
 
-        # Unary expressions bind more tightly than binary expressions.
+        # KerML 1.0 Clause 8.2.5.8.1 Note 2 states that precedence is not
+        # expressed in the KEBNF productions and that all binary operators are
+        # left-associative except exponentiation. Table 6 groups `??`,
+        # `implies`, `|`/`or`, `xor`, `&`/`and`, equality, classification,
+        # relational, range, additive, multiplicative, and exponentiation in
+        # that order from low to high. The KEBNF note is at:
+        # https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1061-L1064
+        # Each `(...)*` below implements the required left associativity.
+        lines.append("nullCoalescingExpression")
+        lines.append("    : impliesExpression ( QUESTION_QUESTION impliesExpression )*")
+        lines.append("    ;")
+        lines.append("")
+        lines.append("impliesExpression")
+        lines.append("    : orExpression ( IMPLIES orExpression )*")
+        lines.append("    ;")
+        lines.append("")
+        lines.append("orExpression")
+        lines.append("    : xorExpression ( ( PIPE | OR ) xorExpression )*")
+        lines.append("    ;")
+        lines.append("")
+        lines.append("xorExpression")
+        lines.append("    : andExpression ( XOR andExpression )*")
+        lines.append("    ;")
+        lines.append("")
+        lines.append("andExpression")
+        lines.append("    : equalityExpression ( ( AMP | AND ) equalityExpression )*")
+        lines.append("    ;")
+        lines.append("")
+        lines.append("equalityExpression")
+        lines.append(
+            "    : classificationExpression ( ( EQ_EQ | BANG_EQ | EQ_EQ_EQ | BANG_EQ_EQ ) classificationExpression )*"
+        )
+        lines.append("    ;")
+        lines.append("")
+
+        # KerML 1.0 Clause 8.2.5.8.1 places classification between relational
+        # and equality, and its ClassificationExpression has one optional
+        # operand followed by exactly one classification/cast suffix:
+        # https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L974-L997
+        # The official Pilot encodes the same barrier as
+        # EqualityExpression -> ClassificationExpression -> RelationalExpression:
+        # https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L156-L183
+        # Before this boundary was explicit, PR #10 accepted
+        # `a istype T + b` as `(a istype T) + b` and accepted chained
+        # classification such as `a istype T as U` under ANTLR 4.13.2.
+        lines.append(
+            "// Evidence: KerML 1.0 Clause 8.2.5.8.1 defines one optional classification/cast suffix, and the Pilot places it between relational and equality expressions."
+        )
+        lines.append(
+            "// Reference: KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L974-L997; Pilot https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L156-L183"
+        )
+        lines.append(
+            "// Evidence: KEBNF MetaclassificationExpression uses MetadataReference -> ElementReferenceMember, and KerML 1.0 Clause 7.4.9.2 shows `designModel @@ ApprovalAnnotation` and `sensors meta KerML::Feature`; therefore `@@` and `meta` require a qualified name operand and cannot be prefix operators."
+        )
+        lines.append(
+            "// Reference: KerML 1.0 Clause 7.4.9.2, https://www.omg.org/spec/KerML/1.0/PDF, and KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L994-L1001"
+        )
+        lines.append(
+            "// Observed PR #10 behavior under ANTLR 4.13.2: `a istype T + b` became `(a istype T) + b`, `a istype T as U` was accepted, and bare `@@ T` was accepted; these forms now stop at the explicit classification boundary or require a qualified name."
+        )
+        lines.append("classificationExpression")
+        lines.append(
+            "    : relationalExpression ( ( ISTYPE | HASTYPE | AT_SIGN | AS ) typeReference )?"
+        )
+        lines.append("    | ( ISTYPE | HASTYPE | AT_SIGN | AS ) typeReference")
+        lines.append("    | qualifiedName ( AT_AT | META ) typeReference")
+        lines.append("    ;")
+        lines.append("")
+
+        lines.append("relationalExpression")
+        lines.append("    : rangeExpression ( ( LT | GT | LE | GE ) rangeExpression )*")
+        lines.append("    ;")
+        lines.append("")
+        lines.append("rangeExpression")
+        lines.append("    : additiveExpression ( DOT_DOT additiveExpression )*")
+        lines.append("    ;")
+        lines.append("")
+        lines.append("additiveExpression")
+        lines.append(
+            "    : multiplicativeExpression ( ( PLUS | MINUS ) multiplicativeExpression )*"
+        )
+        lines.append("    ;")
+        lines.append("")
+        lines.append("multiplicativeExpression")
+        lines.append(
+            "    : exponentiationExpression ( ( STAR | SLASH | PERCENT ) exponentiationExpression )*"
+        )
+        lines.append("    ;")
+        lines.append("")
+        lines.append("exponentiationExpression")
+        lines.append(
+            "    : unaryExpression ( ( STAR_STAR | CARET ) exponentiationExpression )?"
+        )
+        lines.append("    ;")
+        lines.append("")
+
+        # Unary operators are recursive so consecutive unary operators remain
+        # valid, while `all` is the separate extent expression from the KEBNF.
+        # Table 6 puts unary operators above every binary operator:
+        # https://www.omg.org/spec/KerML/1.0/PDF#page=124
+        lines.append(
+            "// Evidence: KerML 1.0 Table 6 places `all` and unary operators above every binary tier; the KEBNF defines `all` as an extent expression."
+        )
+        lines.append(
+            "// Reference: https://www.omg.org/spec/KerML/1.0/PDF#page=124 and KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1027-L1043"
+        )
         lines.append("unaryExpression")
         lines.append("    : ( PLUS | MINUS | TILDE | NOT ) unaryExpression")
-        lines.append("    | ( AT_SIGN | AT_AT ) typeReference")
-        lines.append("    | ALL typeReference")
+        lines.append("    | extentExpression")
+        lines.append("    ;")
+        lines.append("")
+        lines.append("extentExpression")
+        lines.append("    : ALL typeReference")
         lines.append("    | primaryExpression")
         lines.append("    ;")
         lines.append("")
 
-        # Primary postfix forms bind more tightly than unary expressions.
+        # KerML 1.0 Clause 8.2.5.8.2 defines PrimaryExpression as a base
+        # expression followed by feature chaining and the explicit postfix
+        # forms below. It does not define a generic postfix argument-list
+        # operator. Source:
+        # https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1078-L1178
+        # The official Pilot uses the same base/operation structure:
+        # https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L300-L324
+        # KEBNF requires a non-empty sequence for `[]` and `#()`, permits
+        # collect `. { ... }`, select `.? { ... }`, and requires an argument,
+        # body, or function reference after `->`. PR #10 instead accepted
+        # `a[]`, `a#()`, and `a(b)(c)`, while rejecting `a.{b}` and `a->F g`.
+        lines.append(
+            "// Evidence: KerML 1.0 Clause 8.2.5.8.2 defines only the listed primary postfix forms; brackets and index expressions require non-empty sequences, while arrow operations require a body, function reference, or argument list."
+        )
+        lines.append(
+            "// Reference: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1078-L1178 and Pilot https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L300-L324"
+        )
+        lines.append(
+            "// Observed PR #10 behavior under ANTLR 4.13.2: `a[]`, `a#()`, and `a(b)(c)` were accepted, while `a.{b}` and `a->F g` were rejected; this structure follows the KEBNF forms instead."
+        )
         lines.append("primaryExpression")
         lines.append("    : baseExpression")
-        lines.append("    | primaryExpression DOT qualifiedName")
-        lines.append("    | primaryExpression DOT_QUESTION bodyExpression")
+        lines.append("      ( DOT featureChainMember )?")
+        lines.append("      (")
+        lines.append("        (")
+        lines.append("            LBRACK sequenceExpressionList RBRACK")
+        lines.append("          | HASH LPAREN sequenceExpressionList RPAREN")
         lines.append(
-            "    | primaryExpression ARROW qualifiedName ( bodyExpression | argumentList )"
+            "          | ARROW featureChainMember ( bodyExpression | qualifiedName | argumentList )"
         )
-        lines.append("    | primaryExpression LBRACK sequenceExpressionList? RBRACK")
-        lines.append(
-            "    | primaryExpression HASH LPAREN sequenceExpressionList? RPAREN"
-        )
-        lines.append("    | primaryExpression argumentList")
+        lines.append("          | DOT bodyExpression")
+        lines.append("          | DOT_QUESTION bodyExpression")
+        lines.append("        )")
+        lines.append("        ( DOT featureChainMember )?")
+        lines.append("      )*")
         lines.append("    ;")
         lines.append("")
 
@@ -2599,13 +2651,35 @@ class Antlr4Transformer:
         lines.append("    ;")
         lines.append("")
 
-        # Sequence expression (no empty alt — use sequenceExpressionList? at call sites)
+        # The KEBNF distinguishes `()` (NullExpression) from a non-empty
+        # parenthesized SequenceExpression and permits an optional trailing
+        # comma in a SequenceExpressionList:
+        # https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1099-L1118
+        lines.append(
+            "// Evidence: KEBNF Clause 8.2.5.8.2 separates non-empty SequenceExpression from `()` NullExpression and permits one trailing comma in SequenceExpressionList."
+        )
+        lines.append(
+            "// Reference: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1099-L1118"
+        )
+        lines.append("sequenceExpression")
+        lines.append("    : LPAREN sequenceExpressionList RPAREN")
+        lines.append("    ;")
+        lines.append("")
         lines.append("sequenceExpressionList")
-        lines.append("    : ownedExpression ( COMMA ownedExpression )*")
+        lines.append("    : ownedExpression ( COMMA ownedExpression )* COMMA?")
         lines.append("    ;")
         lines.append("")
 
-        # Base expressions (non-recursive)
+        # Base expressions (non-recursive). Keep feature references, metadata
+        # access, and invocation as separate productions: the KEBNF permits a
+        # feature-chain target for InvocationExpression, but does not define a
+        # generic postfix argument-list operator for every PrimaryExpression.
+        lines.append(
+            "// Evidence: KEBNF Clause 8.2.5.8.3 separates FeatureReferenceExpression, MetadataAccessExpression, and InvocationExpression; InvocationExpression accepts an InstantiatedTypeMember plus ArgumentList."
+        )
+        lines.append(
+            "// Reference: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1198-L1229"
+        )
         lines.append("baseExpression")
         lines.append("    : nullExpression")
         lines.append("    | literalExpression")
@@ -2614,7 +2688,7 @@ class Antlr4Transformer:
         lines.append("    | invocationExpression")
         lines.append("    | constructorExpression")
         lines.append("    | bodyExpression")
-        lines.append("    | LPAREN sequenceExpressionList? RPAREN")
+        lines.append("    | sequenceExpression")
         lines.append("    ;")
         lines.append("")
 
@@ -2639,13 +2713,13 @@ class Antlr4Transformer:
 
         # Invocation
         lines.append("invocationExpression")
-        lines.append("    : qualifiedName argumentList")
+        lines.append("    : featureChainMember argumentList")
         lines.append("    ;")
         lines.append("")
 
         # Constructor
         lines.append("constructorExpression")
-        lines.append("    : NEW qualifiedName argumentList")
+        lines.append("    : NEW featureChainMember argumentList")
         lines.append("    ;")
         lines.append("")
 

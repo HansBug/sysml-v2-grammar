@@ -17,63 +17,132 @@ options {
 // $antlr-format alignSemicolons hanging, alignColons hanging
 // $antlr-format minEmptyLines 1, maxEmptyLinesToKeep 1, reflowComments false
 
-// ===== Expression rules (precedence-climbing) =====
+// ===== Expression rules (explicit precedence layers) =====
 
+// Evidence: KerML 1.0 Clause 8.2.5.8.1 Table 6 makes `if` the lowest-precedence operator.
+// Reference: https://www.omg.org/spec/KerML/1.0/PDF#page=124 and KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L939-L948
 ownedExpression
     : IF ownedExpression QUESTION ownedExpression ELSE ownedExpression
     | operatorExpression
     ;
 
+// Evidence: KerML 1.0 Clause 8.2.5.8.1 Note 2 says KEBNF precedence is implicit, all binary operators are left-associative except exponentiation, and Table 6 orders these tiers from high to low.
+// Reference: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1061-L1064
 operatorExpression
-    : unaryExpression
-    | <assoc=right> operatorExpression ( STAR_STAR | CARET ) operatorExpression
-    | operatorExpression ( STAR | SLASH | PERCENT ) operatorExpression
-    | operatorExpression ( PLUS | MINUS ) operatorExpression
-    | operatorExpression DOT_DOT operatorExpression
-    | operatorExpression ( LT | GT | LE | GE ) operatorExpression
-    | operatorExpression ( ISTYPE | HASTYPE | AT_SIGN | AT_AT | AS | META ) typeReference
-    | operatorExpression ( EQ_EQ | BANG_EQ | EQ_EQ_EQ | BANG_EQ_EQ ) operatorExpression
-    | operatorExpression ( AMP | AND ) operatorExpression
-    | operatorExpression XOR operatorExpression
-    | operatorExpression ( PIPE | OR ) operatorExpression
-    | operatorExpression IMPLIES operatorExpression
-    | operatorExpression QUESTION_QUESTION operatorExpression
+    : nullCoalescingExpression
     ;
 
+nullCoalescingExpression
+    : impliesExpression ( QUESTION_QUESTION impliesExpression )*
+    ;
+
+impliesExpression
+    : orExpression ( IMPLIES orExpression )*
+    ;
+
+orExpression
+    : xorExpression ( ( PIPE | OR ) xorExpression )*
+    ;
+
+xorExpression
+    : andExpression ( XOR andExpression )*
+    ;
+
+andExpression
+    : equalityExpression ( ( AMP | AND ) equalityExpression )*
+    ;
+
+equalityExpression
+    : classificationExpression ( ( EQ_EQ | BANG_EQ | EQ_EQ_EQ | BANG_EQ_EQ ) classificationExpression )*
+    ;
+
+// Evidence: KerML 1.0 Clause 8.2.5.8.1 defines one optional classification/cast suffix, and the Pilot places it between relational and equality expressions.
+// Reference: KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L974-L997; Pilot https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L156-L183
+// Evidence: KEBNF MetaclassificationExpression uses MetadataReference -> ElementReferenceMember, and KerML 1.0 Clause 7.4.9.2 shows `designModel @@ ApprovalAnnotation` and `sensors meta KerML::Feature`; therefore `@@` and `meta` require a qualified name operand and cannot be prefix operators.
+// Reference: KerML 1.0 Clause 7.4.9.2, https://www.omg.org/spec/KerML/1.0/PDF, and KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L994-L1001
+// Observed PR #10 behavior under ANTLR 4.13.2: `a istype T + b` became `(a istype T) + b`, `a istype T as U` was accepted, and bare `@@ T` was accepted; these forms now stop at the explicit classification boundary or require a qualified name.
+classificationExpression
+    : relationalExpression ( ( ISTYPE | HASTYPE | AT_SIGN | AS ) typeReference )?
+    | ( ISTYPE | HASTYPE | AT_SIGN | AS ) typeReference
+    | qualifiedName ( AT_AT | META ) typeReference
+    ;
+
+relationalExpression
+    : rangeExpression ( ( LT | GT | LE | GE ) rangeExpression )*
+    ;
+
+rangeExpression
+    : additiveExpression ( DOT_DOT additiveExpression )*
+    ;
+
+additiveExpression
+    : multiplicativeExpression ( ( PLUS | MINUS ) multiplicativeExpression )*
+    ;
+
+multiplicativeExpression
+    : exponentiationExpression ( ( STAR | SLASH | PERCENT ) exponentiationExpression )*
+    ;
+
+exponentiationExpression
+    : unaryExpression ( ( STAR_STAR | CARET ) exponentiationExpression )?
+    ;
+
+// Evidence: KerML 1.0 Table 6 places `all` and unary operators above every binary tier; the KEBNF defines `all` as an extent expression.
+// Reference: https://www.omg.org/spec/KerML/1.0/PDF#page=124 and KEBNF https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1027-L1043
 unaryExpression
     : ( PLUS | MINUS | TILDE | NOT ) unaryExpression
-    | ( AT_SIGN | AT_AT ) typeReference
-    | ALL typeReference
+    | extentExpression
+    ;
+
+extentExpression
+    : ALL typeReference
     | primaryExpression
     ;
 
+// Evidence: KerML 1.0 Clause 8.2.5.8.2 defines only the listed primary postfix forms; brackets and index expressions require non-empty sequences, while arrow operations require a body, function reference, or argument list.
+// Reference: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1078-L1178 and Pilot https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.kerml.expressions.xtext/src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext#L300-L324
+// Observed PR #10 behavior under ANTLR 4.13.2: `a[]`, `a#()`, and `a(b)(c)` were accepted, while `a.{b}` and `a->F g` were rejected; this structure follows the KEBNF forms instead.
 primaryExpression
     : baseExpression
-    | primaryExpression DOT qualifiedName
-    | primaryExpression DOT_QUESTION bodyExpression
-    | primaryExpression ARROW qualifiedName ( bodyExpression | argumentList )
-    | primaryExpression LBRACK sequenceExpressionList? RBRACK
-    | primaryExpression HASH LPAREN sequenceExpressionList? RPAREN
-    | primaryExpression argumentList
+      ( DOT featureChainMember )?
+      (
+        (
+            LBRACK sequenceExpressionList RBRACK
+          | HASH LPAREN sequenceExpressionList RPAREN
+          | ARROW featureChainMember ( bodyExpression | qualifiedName | argumentList )
+          | DOT bodyExpression
+          | DOT_QUESTION bodyExpression
+        )
+        ( DOT featureChainMember )?
+      )*
     ;
 
 typeReference
     : qualifiedName
     ;
 
-sequenceExpressionList
-    : ownedExpression ( COMMA ownedExpression )*
+// Evidence: KEBNF Clause 8.2.5.8.2 separates non-empty SequenceExpression from `()` NullExpression and permits one trailing comma in SequenceExpressionList.
+// Reference: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1099-L1118
+sequenceExpression
+    : LPAREN sequenceExpressionList RPAREN
     ;
 
+sequenceExpressionList
+    : ownedExpression ( COMMA ownedExpression )* COMMA?
+    ;
+
+// Evidence: KEBNF Clause 8.2.5.8.3 separates FeatureReferenceExpression, MetadataAccessExpression, and InvocationExpression; InvocationExpression accepts an InstantiatedTypeMember plus ArgumentList.
+// Reference: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/KerML-textual-bnf.kebnf#L1198-L1229
 baseExpression
     : nullExpression
     | REGULAR_COMMENT   // ignore block comments used as expression placeholders
     | literalExpression
-    | qualifiedName ( argumentList | DOT METADATA )?   // merged featureRef/metadataAccess/invocation
+    | featureReferenceExpression
+    | metadataAccessExpression
+    | invocationExpression
     | constructorExpression
     | bodyExpression
-    | LPAREN AS typeReference RPAREN   // metadata cast expression: (as MetadataType)
-    | LPAREN sequenceExpressionList? RPAREN
+    | sequenceExpression
     ;
 
 nullExpression
@@ -85,8 +154,16 @@ featureReferenceExpression
     : qualifiedName
     ;
 
+metadataAccessExpression
+    : qualifiedName DOT METADATA
+    ;
+
+invocationExpression
+    : featureChainMember argumentList
+    ;
+
 constructorExpression
-    : NEW qualifiedName argumentList
+    : NEW featureChainMember argumentList
     ;
 
 bodyExpression

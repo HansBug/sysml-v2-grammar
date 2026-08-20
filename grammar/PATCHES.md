@@ -3,10 +3,10 @@
 Post-generation patches applied to the ANTLR4 grammar to fix known issues in the
 OMG SysML v2 KEBNF specification when translated to ANTLR4.
 
-- **Grammar version**: `2026.05.1`
+- **Grammar version**: `2026.05.2`
 - **OMG release**: `2026-05`
-- **Total patches**: 54
-- **Applied**: 53
+- **Total patches**: 52
+- **Applied**: 51
 - **Skipped**: 1
 
 ## Spec BNF fix
@@ -83,7 +83,6 @@ The canonical OMG reference model uses `return` inside analysis blocks. Since an
 |---|---------|-------|---------|
 | 11 | Merge `qualifiedName \| ownedFeatureChain` alternatives | ownedSubsetting, ownedReferenceSubsetting, ownedCrossSubsetting, ownedRedefinition, ownedFeatureTyping, generalType, specificType, unioning, intersecting, differencing, ownedFeatureInverting, ownedConjugation, ownedDisjoining, featureChainMember, instantiatedTypeMember | Yes |
 | 12 | Simplify `flowEnd` after feature chain merge | flowEnd | Yes |
-| 22 | Merge expression alternatives in `baseExpression` | baseExpression | Yes |
 | 25 | Factor `definitionBodyItem` for SLL prediction | definitionBodyItem, definitionBodyItemContent | Yes |
 
 ### Fix 11: Merge `qualifiedName | ownedFeatureChain` alternatives
@@ -97,12 +96,6 @@ ANTLR4's SLL prediction mode can't distinguish `qualifiedName` from `ownedFeatur
 `ownedReferenceSubsetting` now consumes dots greedily (Fix 11), so the explicit `DOT` in `flowEnd` is never reached. Simplified to `qualifiedName ( DOT qualifiedName )*`.
 
 **Affected rules**: flowEnd
-
-### Fix 22: Merge expression alternatives in `baseExpression`
-
-Merged `featureReferenceExpression`, `metadataAccessExpression`, and `invocationExpression` into a single alternative that avoids SLL prediction ambiguity on `qualifiedName` lookahead.
-
-**Affected rules**: baseExpression
 
 ### Fix 25: Factor `definitionBodyItem` for SLL prediction
 
@@ -413,29 +406,17 @@ VehicleGeometryAndCoordinateFrames.sysml uses `private attribute` inside a `->fo
 
 **Affected rules**: functionBodyPart
 
-## Extension
-
-| # | Summary | Rules | Applied |
-|---|---------|-------|---------|
-| 53 | Add metadata cast expression `(as Type)` to `baseExpression` | baseExpression | Yes |
-
-### Fix 53: Add metadata cast expression `(as Type)` to `baseExpression`
-
-SysML v2 allows `(as MetadataType)` as a parenthesized cast expression to narrow a metadata annotation to a specific metadata definition type. Added `LPAREN AS typeReference RPAREN` as an alternative in `baseExpression`, placed before the parenthesized sequence expression to avoid ambiguity.
-
-**Affected rules**: baseExpression
-
 ## Dead rule removal
 
 | # | Summary | Rules | Applied |
 |---|---------|-------|---------|
-| 52 | Remove 45 unreachable parser rules | (45 rules removed — see commit for full list) | Yes |
+| 52 | Remove 43 unreachable parser rules | (43 rules removed — see commit for full list) | Yes |
 
-### Fix 52: Remove 45 unreachable parser rules
+### Fix 52: Remove 43 unreachable parser rules
 
-Removed 45 parser rules unreachable from `rootNamespace`. These include merged rules (Fixes 11/22 left definitions behind), feature chain rules (merged into `qualifiedName ( DOT qualifiedName )*` patterns), and metamodel wrapper passthroughs (e.g., `bodyArgumentMember : bodyArgument`) that exist in the KEBNF for type annotations with no ANTLR4 equivalent. Reduces the grammar by ~9%, resulting in smaller ATN serialization, fewer DFA decisions, shallower parse trees, and fewer generated Context classes.
+Removed 43 parser rules unreachable from `rootNamespace`. These include merged rules (Fix 11 and other normalization passes left definitions behind), feature chain rules (merged into `qualifiedName ( DOT qualifiedName )*` patterns), and metamodel wrapper passthroughs (e.g., `bodyArgumentMember : bodyArgument`) that exist in the KEBNF for type annotations with no ANTLR4 equivalent. Reduces the grammar by ~9%, resulting in smaller ATN serialization, fewer DFA decisions, shallower parse trees, and fewer generated Context classes.
 
-**Affected rules**: (45 rules removed — see commit for full list)
+**Affected rules**: (43 rules removed — see commit for full list)
 
 ---
 
