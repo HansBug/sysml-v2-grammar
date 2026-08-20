@@ -2325,6 +2325,21 @@ class Antlr4Transformer:
             }
         )
 
+        # Fix 53: Keep Fix 23 anonymous-usage compatibility out of
+        # `defaultReferenceUsage`. The normative Usage production requires a
+        # UsageDeclaration, and the official Pilot applies the same boundary.
+        # Leaving the broad `usageDeclaration?` path here makes a bare `;`
+        # compete with CalculationBodyPart's final BodyExpression result.
+        patch(
+            "53",
+            "SysML/Pilot alignment and ambiguity fix",
+            "Require a declaration in `defaultReferenceUsage`",
+            "Fix 23 intentionally broadens `usage` for anonymous usage syntax, but the normative KEBNF Usage/DefaultReferenceUsage productions and the official Pilot require a UsageDeclaration in this member. Restore that local boundary so a bare `;` cannot be parsed as an anonymous action item inside CalculationBodyPart, preserving the official result-expression path and eliminating exact ambiguity.",
+            "defaultReferenceUsage\n    : refPrefix usage\n    ;",
+            "defaultReferenceUsage\n    : refPrefix usageDeclaration usageCompletion\n    ;",
+            rules="defaultReferenceUsage",
+        )
+
         return grammar
 
     def generate_patches_md(self, release_tag: str, grammar_version: str) -> str:

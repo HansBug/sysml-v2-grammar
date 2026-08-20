@@ -1148,7 +1148,7 @@ usageBody
     ;
 
 defaultReferenceUsage
-    : refPrefix usage
+    : refPrefix usageDeclaration usageCompletion
     ;
 
 referenceUsage

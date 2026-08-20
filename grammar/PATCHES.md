@@ -5,8 +5,8 @@ OMG SysML v2 KEBNF specification when translated to ANTLR4.
 
 - **Grammar version**: `2026.05.2`
 - **OMG release**: `2026-05`
-- **Total patches**: 52
-- **Applied**: 51
+- **Total patches**: 53
+- **Applied**: 52
 - **Skipped**: 1
 
 ## Spec BNF fix
@@ -404,12 +404,19 @@ Analysis Case Usage Example.sysml uses `= ( //* ... */ )` where the entire expre
 | # | Summary | Rules | Applied |
 |---|---------|-------|---------|
 | 51 | Use `calculationBodyPart` for expression bodies | bodyExpression, functionBodyPart | Yes |
+| 53 | Require a declaration in `defaultReferenceUsage` | defaultReferenceUsage | Yes |
 
 ### Fix 51: Use `calculationBodyPart` for expression bodies
 
 KerML KEBNF defines `ExpressionBody` as `{ FunctionBodyPart }`, whereas the SysML KEBNF defines `CalculationBody` and the official SysML Pilot overrides it with that production (KerML FunctionBody lines 876-877, FunctionBodyPart lines 879-883, and ExpressionBody lines 1253-1260; SysML CalculationBody lines 1363-1378; SysML Pilot `SysML.xtext` lines 1947-1969 and 2436-2439). This SysML grammar follows the first-party override: `calculationBodyPart` preserves action/return members and private attributes, keeps the final result expression, and removes the exact `TypeBodyElement` versus result ambiguity for `a.{ x }`; the `SEMI` alternative is retained because it is part of the official `CalculationBody` production.
 
 **Affected rules**: bodyExpression, functionBodyPart
+
+### Fix 53: Require a declaration in `defaultReferenceUsage`
+
+Fix 23 intentionally broadens `usage` for anonymous usage syntax, but the normative KEBNF Usage/DefaultReferenceUsage productions and the official Pilot require a UsageDeclaration in this member. Restore that local boundary so a bare `;` cannot be parsed as an anonymous action item inside CalculationBodyPart, preserving the official result-expression path and eliminating exact ambiguity.
+
+**Affected rules**: defaultReferenceUsage
 
 ## Dead rule removal
 

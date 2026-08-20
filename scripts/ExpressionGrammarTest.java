@@ -220,6 +220,11 @@ public final class ExpressionGrammarTest {
         cases.add(valid("a->F { x }").requiresRule("BodyExpression"));
         cases.add(valid("a.{ private attribute x := y; x }"));
         cases.add(valid("a.?{}"));
+        cases.add(valid("a.{;}").requiresRule("BodyExpression"));
+        cases.add(valid("a.{x;;}").requiresRule("BodyExpression"));
+        cases.add(valid("a.{x; ;}").requiresRule("BodyExpression"));
+        cases.add(valid("a.{x ; ;}").requiresRule("BodyExpression"));
+        cases.add(valid("a.{y ; ;}").requiresRule("BodyExpression"));
         cases.add(valid("a->F()"));
         cases.add(valid("a.f()").requiresRule("InvocationExpression"));
         cases.add(valid("a.f.g()"));
@@ -263,6 +268,19 @@ public final class ExpressionGrammarTest {
         cases.add(invalid("a->F"));
         cases.add(invalid("a->F.g"));
         cases.add(invalid("a + b c"));
+        // The abstract KEBNF derives these through OwnedExpression operands,
+        // but the released Pilot's concrete precedence grammar rejects them.
+        // Keep that implementation boundary explicit until a deterministic
+        // recursive-operand grammar is available.
+        cases.add(invalid("a + if b ? c else d"));
+        cases.add(invalid("-if b ? c else d"));
+        cases.add(invalid("a ** if b ? c else d"));
+        cases.add(invalid("a ?? if b ? c else d"));
+        cases.add(invalid("a.{;;}"));
+        cases.add(invalid("a.{; x}"));
+        cases.add(invalid("a.{x;; y}"));
+        cases.add(invalid("a.{x;;; y}"));
+        cases.add(invalid("a.{x; ; y}"));
 
         return cases;
     }
