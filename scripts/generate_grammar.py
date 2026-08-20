@@ -6,7 +6,8 @@ Downloads official .kebnf BNF files from the SysML-v2-Release repository
 and converts them into ANTLR4 .g4 grammar files compatible with antlr4ts.
 
 Usage:
-    python generate_grammar.py [--tag TAG] [--output-dir DIR] [--cache]
+    python generate_grammar.py [--tag TAG] [--revision REVISION]
+                               [--output-dir DIR] [--cache]
 """
 
 import json
@@ -2736,7 +2737,7 @@ class Antlr4Transformer:
         # with CalculationBody, whose CalculationBodyPart is unambiguous for
         # both body members and the final result expression:
         # SysML KEBNF: https://github.com/Systems-Modeling/SysML-v2-Release/blob/de1070ae8e79c21532b8004fc663d47b35d0e9fa/bnf/SysML-textual-bnf.kebnf#L1353-L1378
-        # SysML Pilot: https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L1939-L1959 and #L2437-L2439
+        # SysML Pilot: https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/blob/fa709f28dfd49dfdb7ee83e4e19da2f57e0eb3aa/org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext#L1947-L1969 and #L2436-L2439
         lines.append(
             "// Evidence: the normative KerML KEBNF defines ExpressionBody as `{ FunctionBodyPart }` (FunctionBodyPart permits type-body members plus an optional result); the SysML KEBNF defines CalculationBody with `';'` and a braced form; the official SysML Pilot overrides ExpressionBody with CalculationBody."
         )
@@ -3265,16 +3266,19 @@ def download_bnf(config: dict, cache_dir: Optional[str] = None) -> Tuple[str, st
     """Download .kebnf files from GitHub. Returns (kerml_content, sysml_content)."""
     import requests
 
-    tag = config["release_tag"]
+    # Use the immutable release revision for the default generation path. An
+    # explicit ``--tag`` invocation may intentionally select a historical
+    # release and sets this value to that tag in ``main`` below.
+    revision = config.get("release_revision") or config["release_tag"]
     repo = config["release_repo"]
 
     results = {}
     for key, path in config["bnf_files"].items():
-        url = f"https://raw.githubusercontent.com/{repo}/{tag}/{path}"
+        url = f"https://raw.githubusercontent.com/{repo}/{revision}/{path}"
 
         # Check cache first
         if cache_dir:
-            cache_path = Path(cache_dir) / f"{key}-{tag}.kebnf"
+            cache_path = Path(cache_dir) / f"{key}-{revision}.kebnf"
             if cache_path.exists():
                 print(f"  Using cached {key} from {cache_path}")
                 results[key] = cache_path.read_text()
@@ -3286,7 +3290,7 @@ def download_bnf(config: dict, cache_dir: Optional[str] = None) -> Tuple[str, st
         content = resp.text
 
         if cache_dir:
-            cache_path = Path(cache_dir) / f"{key}-{tag}.kebnf"
+            cache_path = Path(cache_dir) / f"{key}-{revision}.kebnf"
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             cache_path.write_text(content)
 
@@ -3305,6 +3309,10 @@ def main():
         description="Generate ANTLR4 grammar from SysML v2 BNF"
     )
     parser_arg.add_argument("--tag", help="Release tag (e.g., 2025-12)")
+    parser_arg.add_argument(
+        "--revision",
+        help="Immutable release revision (commit or tag); defaults to config release_revision",
+    )
     parser_arg.add_argument(
         "--output-dir", help="Output directory for .g4 files", default=None
     )
@@ -3325,6 +3333,12 @@ def main():
 
     if args.tag:
         config["release_tag"] = args.tag
+        # A historical tag is an explicit override of the pinned default.
+        # Callers needing a commit-pinned historical source can pass both
+        # ``--tag`` and ``--revision``.
+        config["release_revision"] = args.tag
+    if args.revision:
+        config["release_revision"] = args.revision
 
     # Validate release tag to prevent path traversal and URL injection
     tag = config["release_tag"]
@@ -3337,6 +3351,16 @@ def main():
         sys.exit(1)
     config["release_tag"] = tag
 
+    revision = config.get("release_revision") or tag
+    if not re.match(r"^[a-zA-Z0-9._-]+$", revision):
+        print(f"Error: invalid release revision: {revision!r}", file=sys.stderr)
+        print(
+            "Revisions must contain only alphanumeric characters, dots, hyphens, and underscores.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    config["release_revision"] = revision
+
     # Determine paths – config.json lives at scripts/config.json,
     # so project_root is one level up from scripts/.
     project_root = config_path.parent.parent
@@ -3345,6 +3369,7 @@ def main():
 
     print("SysML v2 ANTLR4 Grammar Generator")
     print(f"  Release tag: {config['release_tag']}")
+    print(f"  Release revision: {config['release_revision']}")
     print(f"  Output dir:  {output_dir}")
     print()
 

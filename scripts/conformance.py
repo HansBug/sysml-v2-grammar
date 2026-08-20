@@ -114,14 +114,20 @@ def ensure_grammar_compiled() -> None:
     ]
     digest = hashlib.sha256()
     for source in grammar_sources:
+        digest.update(str(source.relative_to(ROOT)).encode("utf-8"))
         digest.update(source.read_bytes())
-    source_hash = digest.hexdigest()
+    # The generated classes depend on both grammar sources and the ANTLR
+    # runtime/tool JAR. Include the JAR bytes so replacing the tool cannot
+    # silently reuse classes compiled by a different generator version.
+    digest.update(b"antlr4.jar\0")
+    digest.update(ANTLR_JAR.read_bytes())
+    build_hash = digest.hexdigest()
 
-    # Reuse only a build produced from the current grammar sources.
+    # Reuse only a build produced from the current grammar sources and JAR.
     previous_hash = GRAMMAR_STAMP.read_text().strip() if GRAMMAR_STAMP.exists() else ""
     if (
         GRAMMAR_CLASS_DIR / "SysMLv2Parser.class"
-    ).exists() and previous_hash == source_hash:
+    ).exists() and previous_hash == build_hash:
         return
 
     print("  Compiling grammar (Java target)...")
@@ -152,7 +158,7 @@ def ensure_grammar_compiled() -> None:
         check=True,
         capture_output=True,
     )
-    GRAMMAR_STAMP.write_text(source_hash + "\n")
+    GRAMMAR_STAMP.write_text(build_hash + "\n")
 
 
 def parse_file(filepath: Path) -> ParseFailure | None:

@@ -77,12 +77,8 @@ test: $(ANTLR_JAR) ## Validate grammar, parse examples, run conformance
 	echo ""; echo "  Results: $$PASS passed, $$FAIL failed"; \
 	[ $$FAIL -eq 0 ]
 	@echo ""
-	@if [ -d test/fixtures/conformance/training ]; then \
-		echo "── Running conformance tests ──"; \
-		$(PYTHON) scripts/conformance.py --verbose; \
-	else \
-		echo "── Conformance fixtures not found (run 'make update-conformance' to fetch) ──"; \
-	fi
+	@echo "── Running conformance tests ──"
+	$(PYTHON) scripts/conformance.py --verbose
 
 update-conformance: ## Fetch official OMG conformance fixtures + standard library
 	$(PYTHON) scripts/conformance.py --fetch

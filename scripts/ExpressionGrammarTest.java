@@ -53,6 +53,7 @@ public final class ExpressionGrammarTest {
         private final Map<String, String> operatorRules = new HashMap<>();
         private final Map<String, Boolean> sameParent = new HashMap<>();
         private String requiredRule;
+        private String outermostOperator;
 
         private TestCase(String input, boolean valid) {
             this.input = input;
@@ -78,6 +79,11 @@ public final class ExpressionGrammarTest {
             requiredRule = rule + "Context";
             return this;
         }
+
+        private TestCase outermost(String token) {
+            outermostOperator = token;
+            return this;
+        }
     }
 
     private static TestCase valid(String input) {
@@ -91,15 +97,15 @@ public final class ExpressionGrammarTest {
     private static List<TestCase> cases() {
         List<TestCase> cases = new ArrayList<>();
 
-        cases.add(valid("a + b * c").operator("+", "AdditiveExpression").operator("*", "MultiplicativeExpression"));
-        cases.add(valid("a * b + c").operator("*", "MultiplicativeExpression").operator("+", "AdditiveExpression"));
-        cases.add(valid("a * b ** c").operator("*", "MultiplicativeExpression").operator("**", "ExponentiationExpression"));
-        cases.add(valid("a ** b * c").operator("**", "ExponentiationExpression").operator("*", "MultiplicativeExpression"));
-        cases.add(valid("a .. b + c").operator("..", "RangeExpression").operator("+", "AdditiveExpression"));
-        cases.add(valid("a + b .. c").operator("+", "AdditiveExpression").operator("..", "RangeExpression"));
-        cases.add(valid("a .. b < c").operator("..", "RangeExpression").operator("<", "RelationalExpression"));
-        cases.add(valid("a < b == c").operator("<", "RelationalExpression").operator("==", "EqualityExpression"));
-        cases.add(valid("a == b < c").operator("==", "EqualityExpression").operator("<", "RelationalExpression"));
+        cases.add(valid("a + b * c").operator("+", "AdditiveExpression").operator("*", "MultiplicativeExpression").outermost("+"));
+        cases.add(valid("a * b + c").operator("*", "MultiplicativeExpression").operator("+", "AdditiveExpression").outermost("+"));
+        cases.add(valid("a * b ** c").operator("*", "MultiplicativeExpression").operator("**", "ExponentiationExpression").outermost("*"));
+        cases.add(valid("a ** b * c").operator("**", "ExponentiationExpression").operator("*", "MultiplicativeExpression").outermost("*"));
+        cases.add(valid("a .. b + c").operator("..", "RangeExpression").operator("+", "AdditiveExpression").outermost(".."));
+        cases.add(valid("a + b .. c").operator("+", "AdditiveExpression").operator("..", "RangeExpression").outermost(".."));
+        cases.add(valid("a .. b < c").operator("..", "RangeExpression").operator("<", "RelationalExpression").outermost("<"));
+        cases.add(valid("a < b == c").operator("<", "RelationalExpression").operator("==", "EqualityExpression").outermost("=="));
+        cases.add(valid("a == b < c").operator("==", "EqualityExpression").operator("<", "RelationalExpression").outermost("=="));
         cases.add(
                 valid("a < b istype T == c")
                         .operator("<", "RelationalExpression")
@@ -320,6 +326,43 @@ public final class ExpressionGrammarTest {
                 }
             }
         }
+
+        if (testCase.outermostOperator != null) {
+            TerminalNode outer = findTerminal(terminals, testCase.outermostOperator);
+            ParseTree outerContext = outer.getParent();
+            for (TerminalNode terminal : terminals) {
+                if (terminal == outer || !testCase.operatorRules.containsKey(terminal.getText())) {
+                    continue;
+                }
+                if (!isAncestor(outerContext, terminal.getParent())) {
+                    throw new AssertionError(
+                            "Expected `"
+                                    + testCase.outermostOperator
+                                    + "` to contain the other operators in `"
+                                    + testCase.input
+                                    + "`\n"
+                                    + tree.toStringTree(parser));
+                }
+            }
+        }
+    }
+
+    private static TerminalNode findTerminal(List<TerminalNode> terminals, String text) {
+        for (TerminalNode terminal : terminals) {
+            if (text.equals(terminal.getText())) {
+                return terminal;
+            }
+        }
+        throw new AssertionError("Operator `" + text + "` was not found in the parse tree");
+    }
+
+    private static boolean isAncestor(ParseTree ancestor, ParseTree node) {
+        for (ParseTree current = node; current != null; current = current.getParent()) {
+            if (current == ancestor) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean containsRule(ParseTree tree, String rule) {
