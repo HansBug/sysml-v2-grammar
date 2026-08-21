@@ -2281,31 +2281,18 @@ class Antlr4Transformer:
             }
         )
 
-        # Fix 53: Add metadata cast expression to baseExpression.
-        # SysML v2 allows parenthesized cast syntax `(as MetadataType)` to cast
-        # a metadata annotation to a specific metadata definition type. This
-        # construct is not present in the OMG KEBNF grammar but is used in
-        # practice. The alternative must appear before the parenthesized
-        # sequence expression `LPAREN sequenceExpressionList? RPAREN` to avoid
-        # being consumed as a grouped expression.
-        prev = grammar
-        grammar = grammar.replace(
-            "    | LPAREN sequenceExpressionList? RPAREN\n    ;",
-            "    | LPAREN AS typeReference RPAREN   // metadata cast expression: (as MetadataType)\n"
-            "    | LPAREN sequenceExpressionList? RPAREN\n    ;",
-        )
+        # Fix 53 is intentionally skipped: the direct ``AS`` classification
+        # alternative already covers ``(as Type)`` without a duplicate base
+        # production or an exact ambiguity.
         self.applied_patches.append(
             {
                 "id": "53",
                 "category": "Extension",
                 "summary": "Add metadata cast expression `(as Type)` to `baseExpression`",
-                "description": "SysML v2 allows `(as MetadataType)` as a parenthesized cast "
-                "expression to narrow a metadata annotation to a specific metadata definition "
-                "type. Added `LPAREN AS typeReference RPAREN` as an alternative in "
-                "`baseExpression`, placed before the parenthesized sequence expression to "
-                "avoid ambiguity.",
+                "description": "Skipped because the direct ``AS`` classification alternative "
+                "covers the same parenthesized form without a duplicate base production.",
                 "rules": "baseExpression",
-                "applied": grammar != prev,
+                "applied": False,
             }
         )
 
@@ -2521,77 +2508,75 @@ class Antlr4Transformer:
     def _generate_expression_rules(self) -> List[str]:
         """Generate ANTLR4 expression rules with proper precedence.
 
-        This converts the flat .kebnf expression grammar (which uses implicit
-        precedence from spec Table 6) into ANTLR4's native left-recursive
-        precedence-climbing format.
+        The source KEBNF leaves precedence implicit. ANTLR direct-left-recursive
+        alternatives must therefore be emitted from high to low precedence,
+        with a right-recursive exponentiation tier and the conditional form
+        last so its ``else`` operand owns trailing operators.
         """
         lines = []
 
-        # Main expression rule with precedence alternatives
+        # ANTLR direct-left-recursive alternatives are emitted high-to-low.
         lines.append("ownedExpression")
+        lines.append("    : ( ISTYPE | HASTYPE | AT_SIGN | AS ) typeReference")
+        lines.append("    | ( PLUS | MINUS | TILDE | NOT ) ownedExpression")
+        lines.append("    | ownedExpression DOT qualifiedName")
+        lines.append("    | ownedExpression LBRACK sequenceExpressionList RBRACK")
+        lines.append("    | ownedExpression HASH LPAREN sequenceExpressionList RPAREN")
         lines.append(
-            "    : IF ownedExpression QUESTION ownedExpression ELSE ownedExpression"
+            "    | ownedExpression ARROW featureChainMember ( bodyExpression | qualifiedName | argumentList )"
         )
-        lines.append("    | ownedExpression QUESTION_QUESTION ownedExpression")
-        lines.append("    | ownedExpression IMPLIES ownedExpression")
-        lines.append("    | ownedExpression OR ownedExpression")
-        lines.append("    | ownedExpression AND ownedExpression")
-        lines.append("    | ownedExpression XOR ownedExpression")
-        lines.append("    | ownedExpression PIPE ownedExpression")
-        lines.append("    | ownedExpression AMP ownedExpression")
-        lines.append(
-            "    | ownedExpression ( EQ_EQ | BANG_EQ | EQ_EQ_EQ | BANG_EQ_EQ ) ownedExpression"
-        )
-        lines.append("    | ownedExpression ( LT | GT | LE | GE ) ownedExpression")
-        lines.append("    | ownedExpression DOT_DOT ownedExpression")
-        lines.append("    | ownedExpression ( PLUS | MINUS ) ownedExpression")
-        lines.append("    | ownedExpression ( STAR | SLASH | PERCENT ) ownedExpression")
+        lines.append("    | ownedExpression DOT bodyExpression")
+        lines.append("    | ownedExpression DOT_QUESTION bodyExpression")
         lines.append(
             "    | <assoc=right> ownedExpression ( STAR_STAR | CARET ) ownedExpression"
         )
-        lines.append("    | ( PLUS | MINUS | TILDE | NOT ) ownedExpression")
-        lines.append("    | ( AT_SIGN | AT_AT ) typeReference")
+        lines.append("    | ownedExpression ( STAR | SLASH | PERCENT ) ownedExpression")
+        lines.append("    | ownedExpression ( PLUS | MINUS ) ownedExpression")
+        lines.append("    | ownedExpression DOT_DOT ownedExpression")
+        lines.append("    | ownedExpression ( LT | GT | LE | GE ) ownedExpression")
         lines.append(
             "    | ownedExpression ( ISTYPE | HASTYPE | AT_SIGN ) typeReference"
         )
         lines.append("    | ownedExpression AS typeReference")
-        lines.append("    | ownedExpression AT_AT typeReference")
-        lines.append("    | ownedExpression META typeReference")
-        lines.append("    | ownedExpression LBRACK sequenceExpressionList? RBRACK")
-        lines.append("    | ownedExpression HASH LPAREN sequenceExpressionList? RPAREN")
-        lines.append("    | ownedExpression argumentList")
-        lines.append("    | ownedExpression DOT qualifiedName")
-        lines.append("    | ownedExpression DOT_QUESTION bodyExpression")
+        lines.append("    | qualifiedName ( AT_AT | META ) typeReference")
         lines.append(
-            "    | ownedExpression ARROW qualifiedName ( bodyExpression | argumentList )"
+            "    | ownedExpression ( EQ_EQ | BANG_EQ | EQ_EQ_EQ | BANG_EQ_EQ ) ownedExpression"
         )
+        lines.append("    | ownedExpression ( AMP | AND ) ownedExpression")
+        lines.append("    | ownedExpression XOR ownedExpression")
+        lines.append("    | ownedExpression ( PIPE | OR ) ownedExpression")
+        lines.append("    | ownedExpression IMPLIES ownedExpression")
+        lines.append("    | ownedExpression QUESTION_QUESTION ownedExpression")
         lines.append("    | ALL typeReference")
         lines.append("    | baseExpression")
+        lines.append(
+            "    | IF ownedExpression QUESTION ownedExpression ELSE ownedExpression"
+        )
         lines.append("    ;")
         lines.append("")
 
-        # Type reference for classification/cast
         lines.append("typeReference")
         lines.append("    : qualifiedName")
         lines.append("    ;")
         lines.append("")
 
-        # Sequence expression (no empty alt — use sequenceExpressionList? at call sites)
         lines.append("sequenceExpressionList")
-        lines.append("    : ownedExpression ( COMMA ownedExpression )*")
+        lines.append("    : ownedExpression ( COMMA ownedExpression )* COMMA?")
         lines.append("    ;")
         lines.append("")
 
-        # Base expressions (non-recursive)
         lines.append("baseExpression")
         lines.append("    : nullExpression")
         lines.append("    | literalExpression")
+        lines.append(
+            "    | qualifiedName DOT qualifiedName ( DOT qualifiedName )* argumentList"
+        )
         lines.append("    | featureReferenceExpression")
         lines.append("    | metadataAccessExpression")
         lines.append("    | invocationExpression")
         lines.append("    | constructorExpression")
         lines.append("    | bodyExpression")
-        lines.append("    | LPAREN sequenceExpressionList? RPAREN")
+        lines.append("    | LPAREN sequenceExpressionList RPAREN")
         lines.append("    ;")
         lines.append("")
 
@@ -2622,7 +2607,7 @@ class Antlr4Transformer:
 
         # Constructor
         lines.append("constructorExpression")
-        lines.append("    : NEW qualifiedName argumentList")
+        lines.append("    : NEW featureChainMember argumentList")
         lines.append("    ;")
         lines.append("")
 

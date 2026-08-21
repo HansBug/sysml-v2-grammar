@@ -58,6 +58,9 @@ test: $(ANTLR_JAR) ## Validate grammar, parse examples, run conformance
 	java -jar $(ANTLR_JAR) -Dlanguage=Java -o $(BUILD_DIR)/antlr-test \
 		grammar/SysMLv2Lexer.g4 grammar/SysMLv2Parser.g4
 	cd $(BUILD_DIR)/antlr-test/grammar && javac -cp "$(CURDIR)/$(ANTLR_JAR):." *.java
+	@echo "── Running focused expression regression ──"
+	javac -cp "$(CURDIR)/$(ANTLR_JAR):$(CURDIR)/$(BUILD_DIR)/antlr-test/grammar" -d "$(CURDIR)/$(BUILD_DIR)/antlr-test/grammar" scripts/ExpressionGrammarTest.java
+	java -cp "$(CURDIR)/$(ANTLR_JAR):$(CURDIR)/$(BUILD_DIR)/antlr-test/grammar" ExpressionGrammarTest
 	@cd $(BUILD_DIR)/antlr-test/grammar && PASS=0; FAIL=0; \
 	for f in $(CURDIR)/examples/*.sysml; do \
 		printf "  Parsing $$(basename $$f)... "; \

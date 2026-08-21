@@ -6,8 +6,8 @@ OMG SysML v2 KEBNF specification when translated to ANTLR4.
 - **Grammar version**: `2026.05.0`
 - **OMG release**: `2026-05`
 - **Total patches**: 54
-- **Applied**: 53
-- **Skipped**: 1
+- **Applied**: 52
+- **Skipped**: 2
 
 ## Spec BNF fix
 
@@ -417,11 +417,11 @@ VehicleGeometryAndCoordinateFrames.sysml uses `private attribute` inside a `->fo
 
 | # | Summary | Rules | Applied |
 |---|---------|-------|---------|
-| 53 | Add metadata cast expression `(as Type)` to `baseExpression` | baseExpression | Yes |
+| 53 | Add metadata cast expression `(as Type)` to `baseExpression` | baseExpression | No |
 
 ### Fix 53: Add metadata cast expression `(as Type)` to `baseExpression`
 
-SysML v2 allows `(as MetadataType)` as a parenthesized cast expression to narrow a metadata annotation to a specific metadata definition type. Added `LPAREN AS typeReference RPAREN` as an alternative in `baseExpression`, placed before the parenthesized sequence expression to avoid ambiguity.
+Skipped because the direct ``AS`` classification alternative covers the same parenthesized form without a duplicate base production.
 
 **Affected rules**: baseExpression
 
